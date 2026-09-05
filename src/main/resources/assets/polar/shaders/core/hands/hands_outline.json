@@ -1,0 +1,13 @@
+{
+  "vertex":"snill:core/kawase_down/kawase_down", "fragment":"snill:core/hands/hands_outline",
+  "samplers":[{"name":"Sampler0"},{"name":"Sampler1"}],
+  "uniforms":[
+    {"name":"ModelViewMat","type":"matrix4x4","count":16,"values":[1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1]},
+    {"name":"ProjMat","type":"matrix4x4","count":16,"values":[1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1]},
+    {"name":"texelSize","type":"float","count":2,"values":[0.001,0.001]},
+    {"name":"width","type":"float","count":1,"values":[1]}, {"name":"alpha","type":"float","count":1,"values":[1]},
+    {"name":"rainbowTime","type":"float","count":1,"values":[0]}, {"name":"rainbowSpeed","type":"float","count":1,"values":[0.4]},
+    {"name":"rainbowScale","type":"float","count":1,"values":[1]}, {"name":"saturation","type":"float","count":1,"values":[1.4]},
+    {"name":"colorMode","type":"int","count":1,"values":[0]}, {"name":"solidColor","type":"float","count":3,"values":[0.54,0.596,1]}
+  ]
+}

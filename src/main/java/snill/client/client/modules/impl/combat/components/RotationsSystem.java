@@ -1,0 +1,66 @@
+package snill.client.client.modules.impl.combat.components;
+
+import net.minecraft.entity.LivingEntity;
+import net.minecraft.util.math.Box;
+import net.minecraft.util.math.Vec2f;
+import net.minecraft.util.math.Vec3d;
+import snill.client.api.QClient;
+import snill.client.client.modules.impl.combat.ElytraTarget;
+import snill.client.client.modules.impl.combat.components.gcd.GCDUtil;
+import ru.virtuoz.convert.Convert;
+
+@Convert(Convert.ConvertType.MUTATION)
+public abstract class RotationsSystem implements QClient {
+
+    public Vec2f rotate = Vec2f.ZERO;
+
+    public abstract void updateRotations(LivingEntity target);
+
+    public static Vec2f correctRotation(float yaw, float pitch) {
+        if ((yaw == -90 && pitch == 90) || yaw == -180) return new Vec2f(mc.player.getYaw(), mc.player.getPitch());
+
+        float gcd = GCDUtil.getGCD();
+        yaw -= yaw % gcd;
+        pitch -= pitch % gcd;
+
+        return new Vec2f(yaw, pitch);
+    }
+
+    protected boolean shouldUseElytraPredict(LivingEntity target) {
+        ElytraTarget elytraTarget = ElytraTarget.INSTANCE;
+        return mc.player != null
+                && target != null
+                && mc.player.isGliding()
+                && target.isGliding()
+                && elytraTarget != null
+                && elytraTarget.isPredictionActive()
+                && !elytraTarget.isCakeWorldMode();
+    }
+
+    protected int getElytraPredictTicks() {
+        ElytraTarget elytraTarget = ElytraTarget.INSTANCE;
+        if (elytraTarget == null || !elytraTarget.isPredictionActive()) {
+            return 0;
+        }
+        return Math.max(0, elytraTarget.getForwardTicks());
+    }
+
+    protected Vec3d getPredictedPoint(LivingEntity target, Vec3d point) {
+        if (!shouldUseElytraPredict(target)) {
+            return point;
+        }
+
+        ElytraTarget elytraTarget = ElytraTarget.INSTANCE;
+        return elytraTarget != null ? elytraTarget.getPredictedPoint(target, point) : point;
+    }
+
+    protected Box getPredictedBox(LivingEntity target) {
+        Box box = target.getBoundingBox();
+        if (!shouldUseElytraPredict(target)) {
+            return box;
+        }
+        Vec3d currentCenter = box.getCenter();
+        Vec3d predictedCenter = getPredictedPoint(target, currentCenter);
+        return box.offset(predictedCenter.subtract(currentCenter));
+    }
+}

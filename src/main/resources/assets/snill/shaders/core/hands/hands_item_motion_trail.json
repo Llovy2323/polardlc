@@ -1,0 +1,15 @@
+{
+  "vertex": "snill:core/kawase_down/kawase_down",
+  "fragment": "snill:core/hands/hands_item_motion_trail",
+  "samplers": [
+    { "name": "Sampler0" }
+  ],
+  "uniforms": [
+    { "name": "ModelViewMat", "type": "matrix4x4", "count": 16, "values": [1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0] },
+    { "name": "ProjMat", "type": "matrix4x4", "count": 16, "values": [1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0] },
+    { "name": "swing", "type": "float", "count": 1, "values": [0.0] },
+    { "name": "smearIntensity", "type": "float", "count": 1, "values": [1.0] },
+    { "name": "glowBoost", "type": "float", "count": 1, "values": [1.0] },
+    { "name": "swipeDir", "type": "float", "count": 2, "values": [0.0, 0.0] }
+  ]
+}

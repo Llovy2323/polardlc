@@ -1,0 +1,16 @@
+{
+  "vertex": "snill:core/kawase_down/kawase_down", "fragment": "snill:core/hands/hands_overlay",
+  "samplers": [{"name":"Sampler0"}],
+  "uniforms": [
+    {"name":"ModelViewMat","type":"matrix4x4","count":16,"values":[1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1]},
+    {"name":"ProjMat","type":"matrix4x4","count":16,"values":[1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1]},
+    {"name":"color","type":"float","count":3,"values":[1,0.267,0.267]},
+    {"name":"fillAlpha","type":"float","count":1,"values":[0.8]},
+    {"name":"shadingStrength","type":"float","count":1,"values":[0.3]},
+    {"name":"keepShading","type":"int","count":1,"values":[1]},
+    {"name":"rainbow","type":"int","count":1,"values":[0]},
+    {"name":"rainbowTime","type":"float","count":1,"values":[0]},
+    {"name":"rainbowSpeed","type":"float","count":1,"values":[0.4]},
+    {"name":"rainbowScale","type":"float","count":1,"values":[1]}
+  ]
+}

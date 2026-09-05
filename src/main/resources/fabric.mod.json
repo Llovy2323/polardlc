@@ -1,0 +1,48 @@
+{
+	"schemaVersion": 1,
+	"id": "snill",
+	"version": "${version}",
+	"name": "SNILL",
+	"description": "SNILL Client for Minecraft 1.21.4",
+	"authors": [
+		"SNILL"
+	],
+	"contact": {},
+	"license": "CC0-1.0",
+	"icon": "assets/snill/icon.png",
+	"environment": "*",
+	"jars": [
+		{
+			"file": "META-INF/jars/baritone-standalone-fabric-1.13.1.jar"
+		},
+		{
+			"file": "META-INF/jars/luaj-core-3.0.8.jar"
+		},
+		{
+			"file": "META-INF/jars/luaj-jse-3.0.8.jar"
+		},
+		{
+			"file": "META-INF/jars/mixinextras-fabric-0.3.6.jar"
+		},
+		{
+			"file": "META-INF/jars/nv-websocket-client-2.14.jar"
+		}
+	],
+	"entrypoints": {
+		"main": [
+			"snill.client.Snill"
+		],
+		"client": [
+			"snill.client.client.SnillDLC"
+		]
+	},
+	"mixins": [
+		"snill.mixins.json"
+	],
+	"depends": {
+		"fabricloader": ">=0.18.4",
+		"minecraft": "~1.21.4",
+		"java": ">=21",
+		"fabric-api": "*"
+	}
+}
