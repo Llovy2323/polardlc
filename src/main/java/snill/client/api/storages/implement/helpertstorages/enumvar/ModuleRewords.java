@@ -85,4 +85,17 @@ public interface ModuleRewords {
     Trails trails = Trails.INSTANCE;
     Tracers tracers = Tracers.INSTANCE;
     Trajectories trajectories = Trajectories.INSTANCE;
+    Velocity velocity = Velocity.INSTANCE;
+    NoSlow noSlow = NoSlow.INSTANCE;
+    TargetStrafe targetStrafe = TargetStrafe.INSTANCE;
+    MaceHelper maceHelper = MaceHelper.INSTANCE;
+    AutoBuff autoBuff = AutoBuff.INSTANCE;
+    AutoEat autoEat = AutoEat.INSTANCE;
+    ChestStealer chestStealer = ChestStealer.INSTANCE;
+    AnchorAura anchorAura = AnchorAura.INSTANCE;
+    AutoWeb autoWeb = AutoWeb.INSTANCE;
+    AutoArmor autoArmor = AutoArmor.INSTANCE;
+    FastBreak fastBreak = FastBreak.INSTANCE;
+    Browser browser = Browser.INSTANCE;
+    HitSounds hitSounds = HitSounds.INSTANCE;
 }

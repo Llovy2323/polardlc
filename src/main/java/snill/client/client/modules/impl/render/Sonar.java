@@ -10,6 +10,8 @@ import net.minecraft.client.render.BufferRenderer;
 import net.minecraft.client.render.Tessellator;
 import net.minecraft.client.render.VertexFormat;
 import net.minecraft.client.render.VertexFormats;
+import net.minecraft.client.sound.PositionedSoundInstance;
+import net.minecraft.sound.SoundEvents;
 import net.minecraft.util.math.MathHelper;
 import net.minecraft.util.math.Vec3d;
 import org.joml.Matrix4f;
@@ -22,17 +24,23 @@ import snill.client.api.utils.animation.Easings;
 import snill.client.api.utils.color.ColorUtils;
 import snill.client.api.utils.render.ShaderUtils;
 import snill.client.client.modules.Module;
+import snill.client.client.modules.settings.implement.BooleanSetting;
 import snill.client.client.modules.settings.implement.FloatSetting;
+import snill.client.client.modules.settings.implement.ModeSetting;
 
 public class Sonar extends Module {
 
     public static Sonar INSTANCE = new Sonar();
 
-    private final FloatSetting interval = new FloatSetting("Интервал", 3.0f, 0.5f, 15.0f, 0.5f);
-    private final FloatSetting duration = new FloatSetting("Длительность", 2.0f, 0.5f, 8.0f, 0.1f);
-    private final FloatSetting alpha = new FloatSetting("Яркость", 1.0f, 0.1f, 1.0f, 0.01f);
-    private final FloatSetting widthMul = new FloatSetting("Ширина", 1.0f, 0.35f, 2.2f, 0.05f);
-    private final FloatSetting sharpness = new FloatSetting("Резкость", 24f, 4f, 80f, 1f);
+    private final ModeSetting mode = new ModeSetting("Режим", "3D Сетка", "3D Сетка", "Киберпанк", "Волна", "Топография");
+    private final FloatSetting maxDistance = new FloatSetting("Дистанция", 64.0f, 20.0f, 160.0f, 5.0f);
+    private final FloatSetting interval = new FloatSetting("Интервал", 3.5f, 0.5f, 15.0f, 0.5f);
+    private final FloatSetting duration = new FloatSetting("Длительность", 2.2f, 0.5f, 8.0f, 0.1f);
+    private final FloatSetting alpha = new FloatSetting("Яркость", 1.0f, 0.2f, 1.5f, 0.05f);
+    private final FloatSetting widthMul = new FloatSetting("Ширина волны", 1.25f, 0.4f, 3.0f, 0.05f);
+    private final FloatSetting sharpness = new FloatSetting("Резкость", 32f, 4f, 80f, 1f);
+    private final BooleanSetting sound = new BooleanSetting("Звук сонара", true);
+    private final BooleanSetting onlyJump = new BooleanSetting("Только при прыжке", false);
 
     private Framebuffer depthCopyBuffer;
     private int lastFbWidth = -1;
@@ -41,16 +49,18 @@ public class Sonar extends Module {
     private long currentStart;
     private long lastPingTime;
     private Vec3d center = Vec3d.ZERO;
+    private boolean wasOnGround = true;
 
     public Sonar() {
         super("Sonar", "Периодическое сканирование местности сонаром", ModuleCategory.RENDER);
-        addSettings(interval, duration, alpha, widthMul, sharpness);
+        interval.visible(() -> !onlyJump.isState());
+        addSettings(mode, maxDistance, interval, duration, alpha, widthMul, sharpness, sound, onlyJump);
     }
 
     @Override
     public void onEnable() {
         lastPingTime = System.currentTimeMillis();
-        if (mc.player != null) {
+        if (mc.player != null && !onlyJump.isState()) {
             ping(mc.player.getPos());
         }
         super.onEnable();
@@ -71,10 +81,22 @@ public class Sonar extends Module {
         }
 
         long now = System.currentTimeMillis();
-        long intervalMs = (long) (interval.get() * 1000f);
-        if (now - lastPingTime >= intervalMs) {
-            ping(mc.player.getPos());
-            lastPingTime = now;
+
+        if (onlyJump.isState()) {
+            boolean onGround = mc.player.isOnGround();
+            boolean jumped = wasOnGround && !onGround && mc.player.getVelocity().y > 0.12;
+            wasOnGround = onGround;
+            if (jumped && now - lastPingTime >= 400L) {
+                ping(mc.player.getPos());
+                lastPingTime = now;
+            }
+        } else {
+            wasOnGround = mc.player.isOnGround();
+            long intervalMs = (long) (interval.get() * 1000f);
+            if (now - lastPingTime >= intervalMs) {
+                ping(mc.player.getPos());
+                lastPingTime = now;
+            }
         }
     }
 
@@ -107,29 +129,42 @@ public class Sonar extends Module {
         Matrix4f invView = new Matrix4f(positionMatrix).invert();
         Matrix4f invProj = new Matrix4f(projectionMatrix).invert();
 
-        float far = mc.gameRenderer.getFarPlaneDistance();
+        float maxR = maxDistance.get();
         float t = MathHelper.clamp(elapsed / durationMs, 0f, 1f);
-        float r1 = lerp(1f, far, (float) Easings.QUINT_OUT.ease(t));
-        float r2 = lerp(1f, far, (float) Easings.QUART_IN_OUT.ease(t));
-        float baseRadius = MathHelper.lerp(0.85f, r1, r2);
+        // Smooth deceleration easing: fast pulse out, smooth deceleration at perimeter
+        float ease = (float) Easings.QUART_OUT.ease(t);
+        float baseRadius = MathHelper.lerp(ease, 1.5f, maxR);
 
-        float alphaPc = 1f - t;
-        float alphaWave = (alphaPc > 0.5f ? 1f - alphaPc : alphaPc) * 2f;
-        alphaWave = Math.min(alphaWave * 1.75f, 1f);
-        float baseAlpha = MathHelper.clamp(alpha.get() * alphaWave, 0f, 1f);
+        // High visibility envelope: fast fade in, full 100% brightness across travel, smooth fade at boundary
+        float alphaFactor = 1.0f;
+        if (t < 0.10f) {
+            alphaFactor = t / 0.10f;
+        } else if (t > 0.78f) {
+            alphaFactor = (1.0f - t) / 0.22f;
+        }
+        float baseAlpha = MathHelper.clamp(alpha.get() * alphaFactor, 0f, 1f);
 
         int c1 = ColorUtils.getThemeColor(0);
         int c2 = ColorUtils.getThemeColor(90);
         int c3 = ColorUtils.getThemeColor(180);
         int c4 = ColorUtils.getThemeColor(270);
 
-        float baseWidth = MathHelper.clamp(6f + baseRadius * (0.18f * widthMul.get()), 4f, Math.max(10f, far * 0.42f));
+        float baseWidth = MathHelper.clamp((5.5f + baseRadius * 0.16f) * widthMul.get(), 3.5f, maxR * 0.5f);
         float baseSharp = sharpness.get();
+
+        int modeIndex = switch (mode.getCurrent()) {
+            case "3D Сетка" -> 0;
+            case "Киберпанк" -> 1;
+            case "Волна" -> 2;
+            case "Топография" -> 3;
+            default -> 0;
+        };
 
         renderPass(invView, invProj, camPos, framebuffer,
                 baseRadius,
                 baseWidth,
                 baseSharp,
+                modeIndex,
                 applyAlpha(c1, baseAlpha),
                 applyAlpha(c2, baseAlpha),
                 applyAlpha(c3, baseAlpha),
@@ -148,7 +183,7 @@ public class Sonar extends Module {
 
     private void renderPass(Matrix4f invView, Matrix4f invProj, Vec3d camPos,
                             Framebuffer framebuffer,
-                            float radius, float width, float sharp,
+                            float radius, float width, float sharp, int modeIndex,
                             int outerColor, int midColor, int innerColor, int scanlineColor) {
         if (radius <= 0.001f || width <= 0.001f) {
             return;
@@ -180,10 +215,10 @@ public class Sonar extends Module {
         if (midColorUniform != null) setColor(midColorUniform, midColor);
         if (innerColorUniform != null) setColor(innerColorUniform, innerColor);
         if (scanlineColorUniform != null) setColor(scanlineColorUniform, scanlineColor);
-        if (debugModeUniform != null) debugModeUniform.set(0);
+        if (debugModeUniform != null) debugModeUniform.set(modeIndex);
 
         RenderSystem.enableBlend();
-        RenderSystem.blendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE);
+        RenderSystem.defaultBlendFunc();
         RenderSystem.setShaderColor(1f, 1f, 1f, 1f);
         RenderSystem.disableDepthTest();
         RenderSystem.disableCull();
@@ -239,6 +274,10 @@ public class Sonar extends Module {
     private void ping(Vec3d pos) {
         currentStart = System.currentTimeMillis();
         center = pos;
+        if (sound.isState() && mc.player != null) {
+            mc.getSoundManager().play(PositionedSoundInstance.master(
+                    SoundEvents.BLOCK_BEACON_ACTIVATE, 1.85f, 0.7f));
+        }
     }
 
     private void setColor(GlUniform uniform, int color) {
@@ -255,9 +294,5 @@ public class Sonar extends Module {
         if (a == 0) a = 255;
         a = (int) (a * MathHelper.clamp(alphaMul, 0f, 1f));
         return (color & 0x00FFFFFF) | (a << 24);
-    }
-
-    private float lerp(float a, float b, float t) {
-        return a + (b - a) * t;
     }
 }

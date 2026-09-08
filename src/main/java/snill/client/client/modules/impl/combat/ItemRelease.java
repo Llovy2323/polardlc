@@ -20,7 +20,7 @@ public class ItemRelease extends Module {
             new BooleanSetting("Арбалет", true)
     );
 
-    private final FloatSetting tickBow = new FloatSetting("Задержка выстрела", 2.5f, 2.0f, 5f, 0.05f)
+    private final FloatSetting tickBow = new FloatSetting("Задержка выстрела (тики)", 20.0f, 3.0f, 25.0f, 1.0f)
             .visible(() -> items.is("Лук"));
 
     public ItemRelease() {

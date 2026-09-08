@@ -14,15 +14,25 @@ import snill.client.api.events.EventLink;
 import snill.client.api.events.implement.EventUpdate;
 import snill.client.client.modules.Module;
 import snill.client.client.modules.settings.implement.FloatSetting;
+import snill.client.client.modules.settings.implement.ModeSetting;
 
 public class FastBreak extends Module {
     public static FastBreak INSTANCE = new FastBreak();
 
-    private final FloatSetting speed = new FloatSetting("Ускорение", 0.5f, 0.3f, 1.0f, 0.1f);
+    public final ModeSetting server = new ModeSetting("Сервер", "FunTime", "FunTime", "HolyWorld", "ReallyWorld", "Универсальный");
+    private final FloatSetting speed = new FloatSetting("Ускорение", 0.5f, 0.3f, 1.0f, 0.1f)
+            .visible(() -> server.is("Универсальный"));
 
     public FastBreak() {
-        super("FastBreak", "Ускоряет ломание блоков", ModuleCategory.PLAYER);
-        addSettings(speed);
+        super("FastBreak", "[FunTime / HolyWorld / ReallyWorld] Ускоряет копание блоков с обходом античитов", ModuleCategory.PLAYER);
+        addSettings(server, speed);
+    }
+
+    public float getEffectiveSpeed() {
+        if (server.is("FunTime")) return 0.6f;
+        if (server.is("HolyWorld")) return 0.6f;
+        if (server.is("ReallyWorld")) return 0.7f;
+        return speed.get();
     }
 
     @EventLink
@@ -39,11 +49,11 @@ public class FastBreak extends Module {
             return;
         }
 
-        accelerateClientBreak(mc.interactionManager, mc.player, mc.world, hit.getBlockPos(), hit.getSide(), speed.get(), true);
+        accelerateClientBreak(mc.interactionManager, mc.player, mc.world, hit.getBlockPos(), hit.getSide(), getEffectiveSpeed(), true);
     }
 
     public float getSpeed() {
-        return speed.get();
+        return getEffectiveSpeed();
     }
 
     public static int getExtraTicks(float speed) {

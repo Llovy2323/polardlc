@@ -1361,7 +1361,7 @@ public class RenderUtils implements QClient {
 
     public void drawBlur(MatrixStack matrices, float x, float y, float width, float height,
                          float topLeft, float topRight, float bottomRight, float bottomLeft, int color) {
-        if (getLiquidBlurTexture() == 0) return;
+        if (mc.world == null || getLiquidBlurTexture() == 0) return;
 
         RenderSystem.enableBlend();
         RenderSystem.defaultBlendFunc();
@@ -1441,6 +1441,7 @@ public class RenderUtils implements QClient {
     }
 
     public void drawBlur1(MatrixStack matrices, float x, float y, float width, float height, float topLeft, float topRight, float bottomRight, float bottomLeft, int color) {
+        if (mc.world == null) return;
         int tex = getLiquidBlurTexture();
         if (tex == 0) return;
 

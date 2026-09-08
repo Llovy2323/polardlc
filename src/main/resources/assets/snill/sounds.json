@@ -1,0 +1,80 @@
+{
+  "bonk": {
+    "sounds": ["snill:bonk"]
+  },
+  "pop": {
+    "sounds": ["snill:pop"]
+  },
+  "uwu": {
+    "sounds": ["snill:uwu"]
+  },
+  "nya": {
+    "sounds": ["snill:nya"]
+  },
+  "tung": {
+    "sounds": ["snill:tung"]
+  },
+  "meow": {
+    "sounds": ["snill:meow"]
+  },
+  "boykisser-1": {
+    "sounds": ["snill:boykisser/boykisser-1"]
+  },
+  "boykisser-2": {
+    "sounds": ["snill:boykisser/boykisser-2"]
+  },
+  "boykisser-3": {
+    "sounds": ["snill:boykisser/boykisser-3"]
+  },
+  "boykisser-4": {
+    "sounds": ["snill:boykisser/boykisser-4"]
+  },
+  "boykisser-5": {
+    "sounds": ["snill:boykisser/boykisser-5"]
+  },
+  "boykisser-6": {
+    "sounds": ["snill:boykisser/boykisser-6"]
+  },
+  "click-1": {
+    "sounds": ["snill:click/click-1"]
+  },
+  "click-2": {
+    "sounds": ["snill:click/click-2"]
+  },
+  "click-3": {
+    "sounds": ["snill:click/click-3"]
+  },
+  "moan-1": {
+    "sounds": ["snill:moan/moan-1"]
+  },
+  "moan-2": {
+    "sounds": ["snill:moan/moan-2"]
+  },
+  "moan-3": {
+    "sounds": ["snill:moan/moan-3"]
+  },
+  "moan-4": {
+    "sounds": ["snill:moan/moan-4"]
+  },
+  "bring": {
+    "sounds": ["snill:bring"]
+  },
+  "glass-1": {
+    "sounds": ["snill:glass/glass-1"]
+  },
+  "glass-2": {
+    "sounds": ["snill:glass/glass-2"]
+  },
+  "glass-3": {
+    "sounds": ["snill:glass/glass-3"]
+  },
+  "soft": {
+    "sounds": ["snill:soft"]
+  },
+  "magicsquash": {
+    "sounds": ["snill:magic_squash"]
+  },
+  "squash": {
+    "sounds": ["snill:squash"]
+  }
+}

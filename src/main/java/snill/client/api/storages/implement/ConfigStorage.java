@@ -354,7 +354,7 @@ public class ConfigStorage {
             try {
                 JsonObject object = modules.has(module.getName())
                         ? modules.get(module.getName()).getAsJsonObject()
-                        : null;
+                        : ("Hud".equals(module.getName()) && modules.has("Interface") ? modules.get("Interface").getAsJsonObject() : null);
 
                 boolean toggled = object != null
                         && object.has("toggled")
@@ -372,9 +372,10 @@ public class ConfigStorage {
 
         for (Module module : ModuleClass.INSTANCE.getObject()) {
             try {
-                if (!modules.has(module.getName())) continue;
-
-                JsonObject object = modules.get(module.getName()).getAsJsonObject();
+                JsonObject object = modules.has(module.getName())
+                        ? modules.get(module.getName()).getAsJsonObject()
+                        : ("Hud".equals(module.getName()) && modules.has("Interface") ? modules.get("Interface").getAsJsonObject() : null);
+                if (object == null) continue;
 
                 if (object.has("bind")) {
                     module.setKey(object.get("bind").getAsInt());

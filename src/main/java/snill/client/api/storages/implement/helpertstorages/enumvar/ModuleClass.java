@@ -12,6 +12,7 @@ public class ModuleClass extends GlobalObject<Module> implements ModuleRewords {
     @Convert(Convert.ConvertType.ULTRA)
     public void initialize() {
         this.add(
+                interfaceModule,
                 antibot,
                 antithorns,
                 aimBot,
@@ -50,7 +51,6 @@ public class ModuleClass extends GlobalObject<Module> implements ModuleRewords {
                 particles,
                 dashTrails,
                 hitMarker,
-                interfaceModule,
                 itemReplacer,
                 interpolateF5,
                 inventoryWalk,
@@ -88,7 +88,20 @@ public class ModuleClass extends GlobalObject<Module> implements ModuleRewords {
                 tracers,
                 trajectories,
                 viewModel,
-                worldTweaks
+                worldTweaks,
+                velocity,
+                noSlow,
+                targetStrafe,
+                maceHelper,
+                autoBuff,
+                autoEat,
+                chestStealer,
+                anchorAura,
+                autoWeb,
+                autoArmor,
+                fastBreak,
+                browser,
+                hitSounds
         );
     }
 

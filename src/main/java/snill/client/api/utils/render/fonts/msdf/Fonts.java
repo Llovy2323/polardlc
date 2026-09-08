@@ -10,7 +10,11 @@ public class Fonts {
     private static boolean initialized = false;
 
     public static void init() {
-        if (initialized) return;
+        init(false);
+    }
+
+    public static void init(boolean force) {
+        if (initialized && !force && !loadedFonts.isEmpty()) return;
         initialized = true;
 
         loadFont("sf_regular");
@@ -19,13 +23,21 @@ public class Fonts {
         loadFont("icon1");
         loadFont("iconnew");
         loadFont("suisse");
+        loadFont("semibold");
+        loadFont("menu");
+        loadFont("clickgui");
+        loadFont("altmanager");
+        loadFont("theme");
+        loadFont("vector");
+        loadFont("wonderful");
+        loadFont("kantumruy");
+        loadFont("desc");
         loadFont("divine_icons");
         loadFont("divine");
         loadFont("waypoint_icons");
         loadFont("myfont");
         loadFont("sfregular");
         loadFont("sf_semibold");
-        loadFont("sf_regular");
         loadFont("sf_medium");
         loadFont("sf_bold");
         loadFont("mototanya");
@@ -34,6 +46,8 @@ public class Fonts {
         loadFont("moe2");
         loadFont("moe3");
         loadFont("energy");
+        loadFont("mainmenu");
+        loadFont("logo");
     }
 
     private static void loadFont(String name) {
@@ -71,6 +85,15 @@ public class Fonts {
         fonts = fontCache.get(cleanName);
         if (fonts != null && fonts[size] != null) {
             return fonts[size];
+        }
+
+        if (cleanName.equals("sf_bold") || cleanName.equals("sf_semibold")) {
+            Font[] fallback = fontCache.get("semibold");
+            if (fallback != null && fallback[size] != null) return fallback[size];
+            fallback = fontCache.get("suisse");
+            if (fallback != null && fallback[size] != null) return fallback[size];
+            fallback = fontCache.get("sf_regular");
+            if (fallback != null && fallback[size] != null) return fallback[size];
         }
 
         return null;

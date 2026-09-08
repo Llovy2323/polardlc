@@ -13,19 +13,11 @@ uniform vec4 outerColor;
 uniform vec4 midColor;
 uniform vec4 innerColor;
 uniform vec4 scanlineColor;
-uniform int DebugMode;
+uniform int DebugMode; // 0 = 3D World Grid, 1 = Cyberpunk Tech, 2 = Clean Wave, 3 = Topography
 uniform vec4 ColorModulator;
 
 in vec2 texCoord;
 out vec4 OutColor;
-
-float scanlines() {
-    float p1 = fract(gl_FragCoord.y * 0.23);
-    float p2 = fract((gl_FragCoord.y + gl_FragCoord.x * 0.045) * 0.165);
-    float b1 = smoothstep(0.02, 0.22, p1) * (1.0 - smoothstep(0.58, 0.86, p1));
-    float b2 = smoothstep(0.03, 0.18, p2) * (1.0 - smoothstep(0.62, 0.88, p2));
-    return clamp(b1 * 0.82 + b2 * 0.36, 0.0, 1.0);
-}
 
 vec3 worldpos(vec2 uv, float depth) {
     float z = depth * 2.0 - 1.0;
@@ -36,56 +28,90 @@ vec3 worldpos(vec2 uv, float depth) {
     return pos + worldSpacePosition.xyz;
 }
 
+// 3D block-edge wireframe in world space
+float calcWorldGrid(vec3 p) {
+    vec3 d = abs(fract(p - 0.5) - 0.5);
+    vec3 edge = 1.0 - smoothstep(vec3(0.0), vec3(0.065), d);
+    return clamp(max(max(edge.x, edge.y), edge.z), 0.0, 1.0);
+}
+
+// Topographic height contour lines along Y axis
+float calcTopo(vec3 p) {
+    float h = abs(fract(p.y * 1.0) - 0.5);
+    float line = 1.0 - smoothstep(0.0, 0.06, h);
+    float major = 1.0 - smoothstep(0.0, 0.09, abs(fract(p.y * 0.2) - 0.5));
+    return clamp(line * 0.70 + major * 0.65, 0.0, 1.0);
+}
+
+// Cyberpunk tech matrix
+float calcTechPattern(vec3 p) {
+    vec3 grid = abs(fract(p) - 0.5);
+    float lines = 1.0 - smoothstep(0.0, 0.07, min(min(grid.x, grid.y), grid.z));
+    vec3 sub = abs(fract(p * 2.0) - 0.5);
+    float sublines = (1.0 - smoothstep(0.0, 0.05, min(min(sub.x, sub.y), sub.z))) * 0.6;
+    return clamp(lines + sublines, 0.0, 1.0);
+}
+
 void main() {
-    vec4 color = vec4(0.0);
-
-    if (DebugMode == 3) {
-        OutColor = vec4(1.0, 0.0, 1.0, 0.75);
-        return;
-    }
-
     vec2 uv = texCoord;
     float depth = texture(depthTex, uv).r;
 
-    if (DebugMode == 1) {
-        float v = (depth >= 1.0) ? 0.0 : (1.0 - depth);
-        OutColor = vec4(v, v * 0.35, 0.0, 0.85);
-        return;
-    }
     if (depth >= 1.0) {
         OutColor = vec4(0.0);
         return;
     }
+
     vec3 p = worldpos(uv, depth);
     float dist = distance(p, center);
 
-    if (DebugMode == 2) {
-        float ringMask = (dist < radius && dist > radius - width) ? 1.0 : 0.0;
-        OutColor = vec4(ringMask * 0.45, ringMask * 0.72, 1.0 * ringMask, ringMask * 0.92);
-        return;
+    if (dist <= radius && dist >= radius - width) {
+        // Normalized 0.0 -> 1.0 across wave thickness (1.0 at front leading edge)
+        float norm = clamp((dist - (radius - width)) / max(width, 1e-5), 0.0, 1.0);
+
+        // Leading edge front glow peak (razor-sharp neon leading line)
+        float frontLine = smoothstep(0.88, 1.0, norm);
+        float frontGlow = smoothstep(0.60, 1.0, norm);
+
+        // Soft wave body envelope at the tail
+        float bodyFade = smoothstep(0.0, 0.20, norm);
+
+        // Concentric acoustic ripples
+        float ripple = sin((1.0 - norm) * 18.849) * 0.5 + 0.5;
+
+        // Pattern selection
+        float pattern = 0.0;
+        if (DebugMode == 0) {
+            // Mode 0: 3D Holographic World Grid (block wireframe)
+            float grid = calcWorldGrid(p);
+            pattern = grid * 0.85 + ripple * 0.20;
+        } else if (DebugMode == 1) {
+            // Mode 1: Cyberpunk Tech
+            float tech = calcTechPattern(p);
+            pattern = tech * 0.80 + ripple * 0.25;
+        } else if (DebugMode == 2) {
+            // Mode 2: Clean Wave
+            pattern = ripple * 0.70 + 0.30;
+        } else {
+            // Mode 3: Topography
+            float topo = calcTopo(p);
+            pattern = topo * 0.80 + ripple * 0.20;
+        }
+
+        // Base wave color
+        vec4 col = mix(innerColor, midColor, norm);
+        col = mix(col, outerColor, frontGlow);
+
+        // Vibrant pattern & front edge illumination
+        vec3 neonRgb = col.rgb;
+        neonRgb = mix(neonRgb, scanlineColor.rgb, clamp(pattern, 0.0, 1.0) * 0.80);
+        neonRgb = mix(neonRgb, vec3(1.0), frontLine * 0.90);
+
+        // Solid, clearly visible alpha that stands out on any terrain/daylight
+        float alphaVal = (0.35 + pattern * 0.55 + frontLine * 0.45) * bodyFade;
+        float totalAlpha = clamp(col.a * alphaVal, 0.0, 1.0);
+
+        OutColor = vec4(neonRgb, totalAlpha);
+    } else {
+        OutColor = vec4(0.0);
     }
-
-    if (dist < radius && dist > radius - width) {
-        float diff = 1.0 - (radius - dist) / max(width, 1e-5);
-        diff = clamp(diff, 0.0, 1.0);
-
-        float edgePower = pow(diff, max(1.0, sharpness * 0.35));
-        float line = scanlines();
-        float lineMask = 0.20 + 0.80 * line;
-        float bodyMask = smoothstep(0.02, 0.22, diff);
-        float edgeMask = smoothstep(0.82, 1.0, diff);
-
-        vec4 grad = mix(innerColor, midColor, pow(diff, 0.80));
-        grad = mix(grad, outerColor, edgePower);
-
-        vec4 stripe = scanlineColor * (0.28 + 0.72 * line) * (0.48 + 0.52 * bodyMask);
-        color = grad * (0.38 + 0.62 * lineMask) + stripe;
-        color.rgb += outerColor.rgb * edgeMask * 0.42;
-        color.a *= bodyMask * (0.50 + 0.50 * lineMask);
-        color.rgb *= 1.35;
-        color.a = min(color.a * 1.18, 1.0);
-
-    }
-
-    OutColor = color;
 }

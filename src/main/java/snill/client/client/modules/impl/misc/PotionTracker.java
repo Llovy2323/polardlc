@@ -218,7 +218,7 @@ public class PotionTracker extends Module {
         if (mc.player == null) return;
 
         MutableText text = Text.literal("");
-        text.append(gradientText("polar", ColorUtils.getThemeColor(0), ColorUtils.getThemeColor(90), true));
+        text.append(gradientText("snill", ColorUtils.getThemeColor(0), ColorUtils.getThemeColor(90), true));
         text.append(Text.literal(" ⇒ ").setStyle(grayStyle()));
         text.append(Text.literal(playerName).setStyle(Style.EMPTY.withColor(TextColor.fromRgb(PLAYER))));
         text.append(Text.literal(" получил ").setStyle(grayStyle()));

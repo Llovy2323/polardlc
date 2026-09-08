@@ -8,7 +8,7 @@ import snill.client.client.modules.settings.implement.BooleanSetting;
 public final class NameProtect extends Module {
 
     public static final NameProtect INSTANCE = new NameProtect();
-    private static final String PROTECTED_NAME = "polardlc.ru";
+    private static final String PROTECTED_NAME = "snill.top";
 
     private final BooleanSetting hideFriends = new BooleanSetting("Скрыть друзей", false);
 

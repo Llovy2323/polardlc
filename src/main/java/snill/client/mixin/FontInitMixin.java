@@ -13,6 +13,6 @@ public class FontInitMixin {
     @Inject(method = "onFinishedLoading", at = @At("TAIL"))
     private void onFinishedLoading(CallbackInfo ci) {
         Fonts.init();
-        snill.client.api.utils.render.fonts.msdf.Fonts.init();
+        snill.client.api.utils.render.fonts.msdf.Fonts.init(true);
     }
 }

@@ -13,6 +13,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import snill.client.api.utils.input.KeyBoardUtils;
+import snill.client.client.modules.impl.render.Browser;
 
 @Mixin(Mouse.class)
 public abstract class MouseMixin {
@@ -29,7 +30,7 @@ public abstract class MouseMixin {
    private void snill$blockFiguraCursorUnlock(CallbackInfo ci) {
    }
 
-   @Inject(method = "onMouseButton", at = @At("HEAD"), cancellable = false)
+   @Inject(method = "onMouseButton", at = @At("HEAD"), cancellable = true)
    private void onMouseButton(long window, int button, int action, int mods, CallbackInfo ci) {
       try {
          if (this.client.player == null) return;
@@ -37,6 +38,22 @@ public abstract class MouseMixin {
          int buttonId = button;
          int actionId = action == GLFW.GLFW_PRESS ? 1 : 0;
          KeyBoardUtils.callMouse(buttonId, actionId);
+
+         if (this.client.currentScreen == null && Browser.handleMouseButton(button, action)) {
+            ci.cancel();
+            return;
+         }
+      } catch (Exception e) {
+      }
+   }
+
+   @Inject(method = "onMouseScroll", at = @At("HEAD"), cancellable = true)
+   private void onMouseScroll(long window, double horizontal, double vertical, CallbackInfo ci) {
+      try {
+         if (this.client.player == null) return;
+         if (this.client.currentScreen == null && Browser.handleMouseScroll(vertical)) {
+            ci.cancel();
+         }
       } catch (Exception e) {
       }
    }

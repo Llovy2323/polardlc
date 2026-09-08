@@ -57,7 +57,7 @@ public class AutoSwap extends Module {
     private static final int RW_STOP_TICKS = 2;
 
     public AutoSwap() {
-        super("AutoSwap", "\u0411\u044b\u0441\u0442\u0440\u0430\u044f \u0441\u043c\u0435\u043d\u0430 \u043f\u0440\u0435\u0434\u043c\u0435\u0442\u043e\u0432 \u0432 \u043e\u0444\u0444-\u0445\u0435\u043d\u0434\u0435", ModuleCategory.COMBAT);
+        super("AutoSwap", "[FunTime / HolyWorld / ReallyWorld] Быстрая смена тотемов, сфер и шаров", ModuleCategory.COMBAT);
         addSettings(swapType, firstItem, secondItem, headFirstItem, headSecondItem, swapKey, bypassgrim);
     }
 

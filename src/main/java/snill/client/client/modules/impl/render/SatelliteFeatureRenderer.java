@@ -41,6 +41,10 @@ public class SatelliteFeatureRenderer extends FeatureRenderer<PlayerEntityRender
             float yawDegrees,
             float pitch
     ) {
+        if (snill.client.client.modules.impl.render.base.implement.TargetHud.renderingDoll) {
+            return;
+        }
+
         matrices.push();
 
         float baseY = playerState.isInSneakingPose ? -1.3f : -1.5f;

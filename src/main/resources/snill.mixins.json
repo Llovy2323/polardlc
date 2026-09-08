@@ -55,7 +55,8 @@
     "SelectItemModelMixin",
     "ItemCooldownManagerAccessor",
     "ItemCooldownManagerEntryAccessor",
-    "TitleScreenMixin"
+    "TitleScreenMixin",
+    "PlayerEntityRendererMixin"
   ],
   "client": [
     "ArmorFeatureRendererMixin"

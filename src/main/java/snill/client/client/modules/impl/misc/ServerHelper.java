@@ -28,7 +28,13 @@ public class ServerHelper extends Module {
 
     public static ServerHelper INSTANCE = new ServerHelper();
 
-    private final ModeSetting mode = new ModeSetting("Режим", "HolyWorld", "HolyWorld", "ReallyWorld", "LonyGrief");
+    private final ModeSetting mode = new ModeSetting("Режим", "FunTime", "FunTime", "HolyWorld", "ReallyWorld", "LonyGrief", "Spooky");
+
+    private final BindSetting trapkaFT = new BindSetting("Трапка", -1).visible(() -> mode.is("FunTime"));
+    private final BindSetting stunFT = new BindSetting("Стан", -1).visible(() -> mode.is("FunTime"));
+    private final BindSetting snowFT = new BindSetting("Снег", -1).visible(() -> mode.is("FunTime"));
+    private final BindSetting dustFT = new BindSetting("Пыль", -1).visible(() -> mode.is("FunTime"));
+    private final BindSetting sphereFT = new BindSetting("Сфера / Шар", -1).visible(() -> mode.is("FunTime"));
 
     private final BindSetting stickHW = new BindSetting("Взрыв штучка", -1).visible(() -> mode.is("HolyWorld"));
     private final BindSetting gulHW = new BindSetting("Гул", -1).visible(() -> mode.is("HolyWorld"));
@@ -55,14 +61,19 @@ public class ServerHelper extends Module {
     private Action pendingAction;
 
     public ServerHelper() {
-        super("ServerHelper", "Помощник для серверов", ModuleCategory.MISC);
+        super("ServerHelper", "[FunTime / HolyWorld / ReallyWorld / Spooky] Помощник для серверов", ModuleCategory.MISC);
         addSettings(
                 mode,
+                trapkaFT, stunFT, snowFT, dustFT, sphereFT,
                 stickHW, gulHW, stunHW, trapkaHW, snowHW, trapkHW,
                 antipoletRW, lovushkaRW,
                 unictrapkaLG, deflivaLG, platformaLG,
                 disorientationSP, trapSP, plastSP, pilSP, snegSP, auraSP
         );
+    }
+
+    public boolean isFunTimeMode() {
+        return mode.is("FunTime");
     }
 
     public boolean isSpookyMode() {
@@ -82,6 +93,7 @@ public class ServerHelper extends Module {
     }
 
     public List<HelperBind> getActiveHelperBinds() {
+        if (mode.is("FunTime")) return getFunTimeHelperBinds();
         if (mode.is("HolyWorld")) return getHolyWorldHelperBinds();
         if (mode.is("ReallyWorld")) return getReallyWorldHelperBinds();
         if (mode.is("LonyGrief")) return getLonyHelperBinds();
@@ -91,11 +103,22 @@ public class ServerHelper extends Module {
 
     public List<HelperBind> getAllHelperBinds() {
         List<HelperBind> binds = new ArrayList<>();
+        binds.addAll(getFunTimeHelperBinds());
         binds.addAll(getHolyWorldHelperBinds());
         binds.addAll(getReallyWorldHelperBinds());
         binds.addAll(getLonyHelperBinds());
         binds.addAll(getSpookyHelperBinds());
         return binds;
+    }
+
+    public List<HelperBind> getFunTimeHelperBinds() {
+        return List.of(
+                new HelperBind("Трапка", Items.POPPED_CHORUS_FRUIT, trapkaFT),
+                new HelperBind("Стан", Items.NETHER_STAR, stunFT),
+                new HelperBind("Снег", Items.SNOWBALL, snowFT),
+                new HelperBind("Пыль", Items.SUGAR, dustFT),
+                new HelperBind("Сфера / Шар", Items.PLAYER_HEAD, sphereFT)
+        );
     }
 
     public String resolveHelperBindName(Item item) {
@@ -180,6 +203,15 @@ public class ServerHelper extends Module {
     public void onBinding(EventBinding event) {
         if (mc.currentScreen != null) return;
         int key = event.getKey();
+
+        if (mode.is("FunTime")) {
+            if (key == trapkaFT.getKey()) pendingAction = Action.TRAP_FT;
+            else if (key == stunFT.getKey()) pendingAction = Action.STUN_FT;
+            else if (key == snowFT.getKey()) pendingAction = Action.SNOW_FT;
+            else if (key == dustFT.getKey()) pendingAction = Action.DUST_FT;
+            else if (key == sphereFT.getKey()) pendingAction = Action.SPHERE_FT;
+            return;
+        }
 
         if (mode.is("HolyWorld")) {
             if (key == stickHW.getKey()) pendingAction = Action.STICK_HW;
@@ -401,6 +433,12 @@ public class ServerHelper extends Module {
     }
 
     private enum Action {
+        TRAP_FT("трапк", "трапки", Items.POPPED_CHORUS_FRUIT, "Использовал трапку!", "Трапка не найдена!"),
+        STUN_FT("стан", "стана", Items.NETHER_STAR, "Использовал стан!", "Стан не найден!"),
+        SNOW_FT("снег", "снега", Items.SNOWBALL, "Использовал снег!", "Снег не найден!"),
+        DUST_FT("пыль", "пыли", Items.SUGAR, "Использовал пыль!", "Пыль не найдена!"),
+        SPHERE_FT("шар", "шара", Items.PLAYER_HEAD, "Использовал шар!", "Шар не найден!"),
+
         STICK_HW("взрыв", "штучки", Items.FIRE_CHARGE, "Использовал взрыв штучку!", "Штучка не найдена!"),
         GUL_HW("гул", "гула", Items.FIREWORK_STAR, "Использовал гул!", "Гул не найден!"),
         STUN_HW("стан", "стана", Items.NETHER_STAR, "Использовал стан!", "Стан не найден!"),

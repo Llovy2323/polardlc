@@ -33,4 +33,21 @@ public abstract class LivingEntityMixin {
             cir.setReturnValue((int) tweaks.slowAnimationSpeed.get());
         }
     }
+
+    @Inject(method = "getHurtSound", at = @At("HEAD"), cancellable = true)
+    private void onGetHurtSound(net.minecraft.entity.damage.DamageSource source, CallbackInfoReturnable<net.minecraft.sound.SoundEvent> cir) {
+        if ((Object) this != MinecraftClient.getInstance().player) {
+            return;
+        }
+
+        snill.client.client.modules.impl.render.HitSounds hitSounds = snill.client.client.modules.impl.render.HitSounds.INSTANCE;
+        if (hitSounds != null && hitSounds.isEnable() && !hitSounds.damageSound.is("Нет")) {
+            net.minecraft.sound.SoundEvent custom = hitSounds.getDamageSoundEvent();
+            if (custom != null) {
+                hitSounds.playedHurtThisTick = true;
+                hitSounds.playCustom(custom);
+                cir.setReturnValue(null);
+            }
+        }
+    }
 }

@@ -16,12 +16,12 @@ public final class AutoJoin extends Module {
     public static AutoJoin INSTANCE = new AutoJoin();
 
     private final FloatSetting griefSelection = new FloatSetting("Гриферский мир", 1.0f, 1.0f, 54.0f, 1.0f);
-    private final FloatSetting speed = new FloatSetting("Скорость", 3.0f, 1.0f, 10.0f, 1.0f);
+    private final FloatSetting delay = new FloatSetting("Задержка (мс)", 350.0f, 100.0f, 2000.0f, 50.0f);
     private final TimerUtils timerUtil = new TimerUtils();
 
     public AutoJoin() {
         super("AutoJoin", "Автоматически заходит на сервер", ModuleCategory.MISC);
-        addSettings(griefSelection, speed);
+        addSettings(griefSelection, delay);
     }
 
     @Override
@@ -72,7 +72,7 @@ public final class AutoJoin extends Module {
                     int numberGrief = griefSelection.getValue().intValue();
 
                     if (s.contains("ГРИФЕРСКОЕ ВЫЖИВАНИЕ") || s.contains("ГРИФ #" + numberGrief + " (1.16.5+)")) {
-                        if (timerUtil.finished(speed.getValue().longValue())) {
+                        if (timerUtil.finished((long) delay.get())) {
                             mc.interactionManager.clickSlot(
                                     container.syncId,
                                     i,

@@ -16,12 +16,12 @@ public class ChatUtils {
         MinecraftClient mc = MinecraftClient.getInstance();
 
         if (mc.player == null) {
-            System.out.println("[polar] " + message);
+            System.out.println("[snill] " + message);
             return;
         }
 
         MutableText text = Text.literal("");
-        String prefix = "polar";
+        String prefix = "snill";
         for (int i = 0; i < prefix.length(); i++) {
             text.append(Text.literal(String.valueOf(prefix.charAt(i)))
                     .setStyle(Style.EMPTY

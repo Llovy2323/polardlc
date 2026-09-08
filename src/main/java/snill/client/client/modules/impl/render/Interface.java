@@ -44,6 +44,7 @@ public class Interface extends Module {
     private final TargetHud targetHud;
     private final Information information;
     private final StaffList staffList;
+    private final MusicHud musicHud;
 
     private boolean targetHudMenuOpen;
     private float targetHudMenuX;
@@ -74,10 +75,11 @@ public class Interface extends Module {
             new BooleanSetting("Таргет худ", true),
             new BooleanSetting("Уведомления", true),
             new BooleanSetting("Стафф", true),
-            new BooleanSetting("Информация", true));
+            new BooleanSetting("Информация", true),
+            new BooleanSetting("Музыка", true));
 
     public Interface() {
-        super("Interface", "Интерфейс клиента", ModuleCategory.RENDER);
+        super("Hud", "Интерфейс клиента", ModuleCategory.RENDER);
         this.waterMark = new WaterMark(Snill.draggable(this, "WaterMark", 10, 10));
         this.keyBinds = new KeyBinds(Snill.draggable(this, "KeyBinds", 30, 30));
         this.helperBinds = new HelperBinds(Snill.draggable(this, "HelperBinds", 90, 30));
@@ -88,6 +90,7 @@ public class Interface extends Module {
         this.notifications = new Notifications(Snill.draggable(this, "Notifications", 0, 0));
         this.armorHud = new ArmorHud(Snill.draggable(this, "ArmorHud", 30, 120));
         this.targetHud = new TargetHud(Snill.draggable(this, "TargetHud", 30, 90));
+        this.musicHud = new MusicHud(Snill.draggable(this, "MusicHud", 30, 150));
 
         addSettings(hudModules);
     }
@@ -146,6 +149,7 @@ public class Interface extends Module {
         if (isHudElementEnabled(information) && isHudElementHovered(information, mouseX, mouseY)) return information;
         if (isHudElementEnabled(staffList) && isHudElementHovered(staffList, mouseX, mouseY)) return staffList;
         if (isHudElementEnabled(notifications) && isHudElementHovered(notifications, mouseX, mouseY)) return notifications;
+        if (isHudElementEnabled(musicHud) && isHudElementHovered(musicHud, mouseX, mouseY)) return musicHud;
         return null;
     }
 
@@ -159,7 +163,7 @@ public class Interface extends Module {
     }
 
     private float getMenuHeightForElement(InterfaceProcessing element) {
-        if (element == targetHud) return 43.0f;
+        if (element == targetHud) return 56.0f;
         if (element == waterMark) return 30.0f;
         if (element == information) return 24.0f;
         return 0.0f;
@@ -179,6 +183,64 @@ public class Interface extends Module {
 
     public boolean handleHudContextClick(double mouseX, double mouseY, int button) {
         InterfaceProcessing hoveredElement = getHoveredHudElement(mouseX, mouseY);
+        if (hoveredElement == musicHud && musicHud != null && musicHud.handleClick(mouseX, mouseY, button)) {
+            return true;
+        }
+
+        if (targetHudMenuOpen && hudContextElement != null) {
+            float menuWidth = getTargetHudMenuWidth();
+            float menuHeight = getTargetHudMenuHeight();
+            clampTargetHudMenuToWindow(menuWidth, menuHeight);
+
+            boolean menuHovered = HoveringUtils.isHovered(mouseX, mouseY, targetHudMenuX, targetHudMenuY, menuWidth, menuHeight);
+            if (menuHovered) {
+                if (hudContextElement == targetHud) {
+                    TargetHud ctx = (TargetHud) hudContextElement;
+                    if (ctx.clickModeSelector(
+                            mouseX, mouseY, button,
+                            targetHudMenuX + 5.0f,
+                            targetHudMenuY + 4.0f,
+                            menuWidth - 10.0f
+                    )) {
+                        return true;
+                    }
+                    float buttonGap = 3.0f;
+                    float buttonX = targetHudMenuX + 5.0f;
+                    float buttonW = (menuWidth - 10.0f - buttonGap) / 2.0f;
+                    float buttonH = 10.0f;
+                    float normalButtonX = buttonX;
+                    float unusualButtonX = buttonX + buttonW + buttonGap;
+                    float buttonY = targetHudMenuY + 41.5f;
+                    float particlesToggleX = targetHudMenuX + menuWidth - 21.0f;
+                    float particlesToggleY = targetHudMenuY + 20.0f;
+                    boolean normalHovered = HoveringUtils.isHovered(mouseX, mouseY, normalButtonX, buttonY, buttonW, buttonH);
+                    boolean unusualHovered = HoveringUtils.isHovered(mouseX, mouseY, unusualButtonX, buttonY, buttonW, buttonH);
+                    boolean particlesHovered = HoveringUtils.isHovered(mouseX, mouseY, targetHudMenuX + 5.0f, particlesToggleY - 1.0f, menuWidth - 10.0f, 11.0f);
+                    if (button == 0 && normalHovered) { ctx.setHealthBarStyleEnabled(false); return true; }
+                    if (button == 0 && unusualHovered) { ctx.setHealthBarStyleEnabled(true); return true; }
+                    if (button == 0 && particlesHovered) { ctx.setHeadParticlesEnabled(!ctx.isHeadParticlesEnabled()); return true; }
+                } else if (hudContextElement == waterMark) {
+                    float baseY = targetHudMenuY + 4.5f;
+                    float toggleX = targetHudMenuX + menuWidth - 21.0f;
+                    boolean fpsHovered = HoveringUtils.isHovered(mouseX, mouseY, toggleX, baseY, 16.0f, 9.0f);
+                    boolean msHovered = HoveringUtils.isHovered(mouseX, mouseY, toggleX, baseY + 10.0f, 16.0f, 9.0f);
+                    if (button == 0 && fpsHovered) { waterMark.setShowFps(!waterMark.isShowFps()); return true; }
+                    if (button == 0 && msHovered) { waterMark.setShowMs(!waterMark.isShowMs()); return true; }
+                } else if (hudContextElement == information) {
+                    float copyButtonY = targetHudMenuY + 4.5f;
+                    float copyButtonX = targetHudMenuX + 5.0f;
+                    float copyButtonW = menuWidth - 10.0f;
+                    float copyButtonH = 10.0f;
+                    boolean copyHovered = HoveringUtils.isHovered(mouseX, mouseY, copyButtonX, copyButtonY, copyButtonW, copyButtonH);
+                    if (button == 0 && copyHovered) {
+                        information.handleCopyClick();
+                        targetHudMenuOpen = false;
+                        return true;
+                    }
+                }
+                return true;
+            }
+        }
 
         if (button == 1 && hoveredElement != null && hasHudContextSettings(hoveredElement)) {
             if (targetHudMenuOpen && hudContextElement == hoveredElement) {
@@ -213,67 +275,9 @@ public class Interface extends Module {
             return true;
         }
 
-        if (!targetHudMenuOpen || hudContextElement == null) return false;
-
-        float menuWidth = getTargetHudMenuWidth();
-        float menuHeight = getTargetHudMenuHeight();
-        clampTargetHudMenuToWindow(menuWidth, menuHeight);
-
-        float buttonGap = 3.0f;
-        float buttonX = targetHudMenuX + 5.0f;
-        float buttonW = (menuWidth - 10.0f - buttonGap) / 2.0f;
-        float buttonH = 10.0f;
-        float normalButtonX = buttonX;
-        float unusualButtonX = buttonX + buttonW + buttonGap;
-
-        boolean informationContext = hudContextElement == information;
-        boolean targetHudContext = hudContextElement == targetHud;
-
-        boolean menuHovered = HoveringUtils.isHovered(mouseX, mouseY, targetHudMenuX, targetHudMenuY, menuWidth, menuHeight);
-
-        if (button == 0 && !menuHovered && hoveredElement == hudContextElement) {
+        if (button == 0 && targetHudMenuOpen) {
             targetHudMenuOpen = false;
             pendingHudContextElement = null;
-            return false;
-        }
-
-        if (targetHudContext) {
-            TargetHud ctx = (TargetHud) hudContextElement;
-            float buttonY = targetHudMenuY + 25.0f;
-            float particlesToggleX = targetHudMenuX + menuWidth - 21.0f;
-            float particlesToggleY = targetHudMenuY + 4.0f;
-            boolean normalHovered = HoveringUtils.isHovered(mouseX, mouseY, normalButtonX, buttonY, buttonW, buttonH);
-            boolean unusualHovered = HoveringUtils.isHovered(mouseX, mouseY, unusualButtonX, buttonY, buttonW, buttonH);
-            boolean particlesHovered = HoveringUtils.isHovered(mouseX, mouseY, particlesToggleX, particlesToggleY, 16.0f, 9.0f);
-            if (button == 0 && normalHovered) { ctx.setHealthBarStyleEnabled(false); return true; }
-            if (button == 0 && unusualHovered) { ctx.setHealthBarStyleEnabled(true); return true; }
-            if (button == 0 && particlesHovered) { ctx.setHeadParticlesEnabled(!ctx.isHeadParticlesEnabled()); return true; }
-        } else if (hudContextElement == waterMark) {
-            float baseY = targetHudMenuY + 4.5f;
-            float toggleX = targetHudMenuX + menuWidth - 21.0f;
-            boolean fpsHovered = HoveringUtils.isHovered(mouseX, mouseY, toggleX, baseY, 16.0f, 9.0f);
-            boolean msHovered = HoveringUtils.isHovered(mouseX, mouseY, toggleX, baseY + 10.0f, 16.0f, 9.0f);
-            if (button == 0 && fpsHovered) { waterMark.setShowFps(!waterMark.isShowFps()); return true; }
-            if (button == 0 && msHovered) { waterMark.setShowMs(!waterMark.isShowMs()); return true; }
-        } else if (informationContext) {
-            float copyButtonY = targetHudMenuY + 4.5f;
-            float copyButtonX = targetHudMenuX + 5.0f;
-            float copyButtonW = menuWidth - 10.0f;
-            float copyButtonH = 10.0f;
-            boolean copyHovered = HoveringUtils.isHovered(mouseX, mouseY, copyButtonX, copyButtonY, copyButtonW, copyButtonH);
-            if (button == 0 && copyHovered) {
-                information.handleCopyClick();
-                targetHudMenuOpen = false;
-                return true;
-            }
-        }
-
-        if (button == 0 || button == 1) {
-            if (menuHovered) return true;
-            if (hoveredElement != hudContextElement) {
-                targetHudMenuOpen = false;
-                pendingHudContextElement = null;
-            }
         }
         return false;
     }
@@ -345,8 +349,18 @@ public class Interface extends Module {
             boolean particlesEnabled = ctx.isHeadParticlesEnabled();
             boolean healthBarStyle = ctx.isHealthBarStyleEnabled();
 
-            issue(12).drawStringWithFade(matrices, "Частицы с головы", x + 4.7f, y + 7.5f, menuWidth - 28.0f,
-                    ColorUtils.rgba(255, 255, 255, textAlpha));
+            ctx.drawModeSelector(
+                    context,
+                    x + 5.0f,
+                    y + 4.0f,
+                    menuWidth - 10.0f,
+                    mouseX,
+                    mouseY
+            );
+            float particlesRowY = y + 20.0f;
+            issue(12).draw(matrices, "Частицы с головы", x + 5.0f, particlesRowY + 3.0f,
+                    ColorUtils.rgba(255, 255, 255, fadeTextAlphaSafe(contentProgress, 225, 2)));
+
             targetHudParticlesBgAnimation.update(particlesEnabled ? 1.0f : 0.0f);
             targetHudParticlesCircleAnimation.update(particlesEnabled ? 1.0f : 0.0f);
             float bgProgress = targetHudParticlesBgAnimation.getValue();
@@ -354,15 +368,17 @@ public class Interface extends Module {
             int particlesOffColor = ColorUtils.darken(themeColor, 0.05f);
             int particlesColor = ColorUtils.interpolateColor(particlesOffColor, themeColor, bgProgress);
             float particlesToggleX = x + menuWidth - 21.0f;
-            float particlesToggleY = y + 4.5f;
+            float particlesToggleY = particlesRowY;
             RenderUtils.drawGradientRect(matrices, particlesToggleX, particlesToggleY, 16.0f, 9.0f, 3,
                     fadeColorSafe(particlesColor, contentProgress, 2), fadeColorSafe(ColorUtils.darken(particlesColor, 0.65f), contentProgress, 2));
             float particlesCircleX = particlesToggleX + 4.5f + (circleProgress * 6.2f);
             RenderUtils.drawRoundCircle(matrices, particlesCircleX + 0.5f, particlesToggleY + 4.5f, 6.85f,
                     ColorUtils.rgba(255, 255, 255, textAlpha));
-            issue(12).draw(matrices, "Вид полоски", x + 4.7f, y + 18.0f,
+
+            float barLabelY = y + 32.5f;
+            issue(12).draw(matrices, "Вид полоски", x + 5.0f, barLabelY,
                     ColorUtils.rgba(255, 255, 255, fadeTextAlphaSafe(contentProgress, 225, 2)));
-            float buttonY = y + 25.0f;
+            float buttonY = y + 41.5f;
             targetHudBarSwitchAnimation.update(healthBarStyle ? 1.0f : 0.0f);
             float typeSwitchProgress = MathHelper.clamp(targetHudBarSwitchAnimation.getValue(), 0.0f, 1.0f);
             RenderUtils.drawRoundedRect(matrices, normalX, buttonY, buttonW, buttonH, 1.5f, inactiveColor);
@@ -455,6 +471,7 @@ public class Interface extends Module {
         elements.put("targetHud", targetHud);
         elements.put("information", information);
         elements.put("staffList", staffList);
+        elements.put("musicHud", musicHud);
         return elements;
     }
 
@@ -470,6 +487,7 @@ public class Interface extends Module {
         boolean showStaff = hudModules.is("Стафф");
         boolean showNotifications = hudModules.is("Уведомления");
         boolean showTargetHud = hudModules.is("Таргет худ");
+        boolean showMusic = hudModules.is("Музыка");
 
         if (mc != null && mc.getWindow() != null && mc.currentScreen instanceof ChatScreen) {
             Font hintFont = issue(18);
@@ -489,6 +507,7 @@ public class Interface extends Module {
             if (showInformation) renderHudElement(this.information, event);
             if (showStaff) renderHudElement(this.staffList, event);
             if (showNotifications) renderHudElement(this.notifications, event);
+            if (showMusic) renderHudElement(this.musicHud, event);
             if (showTargetHud) {
                 renderHudElement(this.targetHud, event);
             }
@@ -501,5 +520,13 @@ public class Interface extends Module {
             targetHudMenuOpen = false;
             pendingHudContextElement = null;
         }
+    }
+
+    @Override
+    public void onDisable() {
+        if (targetHud != null) {
+            targetHud.close();
+        }
+        super.onDisable();
     }
 }

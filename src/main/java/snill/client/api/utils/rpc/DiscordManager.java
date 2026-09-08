@@ -27,7 +27,7 @@ public class DiscordManager implements QClient {
         APPLICATION_ID = 1518324607998885908L;
         running = true;
         image = "https://files.catbox.moe/bfi6g2.gif";
-        site = "https://polardlc.ru";
+        site = "https://snill.top";
         discord = "https://discord.gg/zqgU8kcKmh";
     }
     @Convert(Convert.ConvertType.ULTRA)

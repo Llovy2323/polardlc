@@ -19,11 +19,12 @@ public class PacketCriticals extends Module {
         if (mc.player == null || mc.world == null) return;
 
         boolean inWeb = IdealHitUtils.isInCobweb();
+        boolean slowFalling = mc.player.hasStatusEffect(StatusEffects.SLOW_FALLING);
 
         double x = mc.player.getX();
         double y = mc.player.getY();
         double z = mc.player.getZ();
-        if (inWeb) {
+        if (inWeb || slowFalling) {
             mc.player.networkHandler.sendPacket(new PlayerMoveC2SPacket.PositionAndOnGround(x, y + 0.00300, z, false, false));
             mc.player.networkHandler.sendPacket(new PlayerMoveC2SPacket.PositionAndOnGround(x, y, z, false, false));
         }

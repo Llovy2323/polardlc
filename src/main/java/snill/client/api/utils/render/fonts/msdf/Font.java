@@ -50,6 +50,14 @@ public class Font implements QClient {
         draw(matrixStack, text, x - getStringWidth(text) / 2f, y, color);
     }
 
+    public void drawCentered(MatrixStack matrixStack, String text, float x, float y, int color) {
+        drawCenteredString(matrixStack, text, x, y, color);
+    }
+
+    public void drawCentered(MatrixStack matrixStack, String text, double x, double y, int color) {
+        drawCenteredString(matrixStack, text, (float) x, (float) y, color);
+    }
+
     public void drawRight(MatrixStack matrixStack, String text, double x, double y, int color) {
         draw(matrixStack, text, (float) (x - getStringWidth(text)), (float) y, color);
     }

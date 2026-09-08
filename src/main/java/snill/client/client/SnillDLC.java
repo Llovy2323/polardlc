@@ -26,5 +26,7 @@ public class SnillDLC implements ClientModInitializer {
         registry.register((net.minecraft.particle.ParticleType) ParticularParticleTypes.WATER_SPLASH_RING, WaterSplashRingParticle.Factory::new);
         registry.register((net.minecraft.particle.ParticleType) ParticularParticleTypes.WATER_SPLASH_EMITTER, (type, world, x, y, z, velocityX, velocityY, velocityZ) ->
                 new WaterSplashEmitterParticle(world, x, y, z, velocityX, velocityY, velocityZ));
+
+        snill.client.client.modules.impl.render.HitSounds.registerAll();
     }
 }

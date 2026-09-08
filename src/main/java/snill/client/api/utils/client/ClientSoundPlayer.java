@@ -31,9 +31,14 @@ public class ClientSoundPlayer {
     }
 
     private void playInternal(String fileName, double volume, float pitch) {
-        String resourcePath = "/assets/polar/sounds/" + fileName;
+        String resourcePath = "/assets/snill/sounds/" + fileName;
+        InputStream is = ClientSoundPlayer.class.getResourceAsStream(resourcePath);
+        if (is == null) {
+            resourcePath = "/assets/polar/sounds/" + fileName;
+            is = ClientSoundPlayer.class.getResourceAsStream(resourcePath);
+        }
 
-        try (InputStream inputStream = ClientSoundPlayer.class.getResourceAsStream(resourcePath)) {
+        try (InputStream inputStream = is) {
             if (inputStream == null) {
                 return;
             }

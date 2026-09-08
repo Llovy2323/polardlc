@@ -52,9 +52,7 @@ import snill.client.api.utils.rotate.RotationUtils;
 import snill.client.client.modules.Module;
 import snill.client.client.modules.impl.combat.components.RotationsSystem;
 import snill.client.client.modules.impl.combat.components.interpolation.BestPoint;
-import snill.client.client.modules.impl.combat.components.rotations.GrimLiteRotation;
-import snill.client.client.modules.impl.combat.components.rotations.SlothRotation;
-import snill.client.client.modules.impl.combat.components.rotations.SpookyTimeRotation;
+import snill.client.client.modules.impl.combat.components.rotations.*;
 import snill.client.client.modules.impl.movement.AirStuck;
 import snill.client.client.modules.settings.implement.BooleanSetting;
 import snill.client.client.modules.settings.implement.FloatSetting;
@@ -72,8 +70,8 @@ public class Aura extends Module {
 
     public static Aura INSTANCE = new Aura();
 
-    public final ModeSetting rotationType = new ModeSetting("Ротация", "Smooth",
-            "Smooth", "GrimLite", "Sloth", "SpookyTime", "NoRotate");
+    public final ModeSetting rotationType = new ModeSetting("Ротация", "FunTime",
+            "FunTime", "HolyWorld", "ReallyWorld", "SpookyTime", "SuperLegit", "HvH", "NoRotate");
 
     private final ListSetting targets = new ListSetting("Таргеты",
             new BooleanSetting("Игроки", true),
@@ -110,9 +108,12 @@ public class Aura extends Module {
     private final TimerUtils attackTimer = new TimerUtils();
     private final BooleanSetting rwWallBypass = new BooleanSetting("Обход рв стен", false);
     private final BooleanSetting syncTps = new BooleanSetting("Синхронизировать с ТПСом", false);
-    private final GrimLiteRotation GrimLiteRotation = new GrimLiteRotation(this);
-    private final SlothRotation slothRotation = new SlothRotation(this);
+    private final FunTimeRotation funTimeRotation = new FunTimeRotation(this);
+    private final HolyWorldRotation holyWorldRotation = new HolyWorldRotation(this);
+    private final ReallyWorldRotation reallyWorldRotation = new ReallyWorldRotation(this);
     private final SpookyTimeRotation spookyTimeRotation = new SpookyTimeRotation();
+    private final SuperLegitRotation superLegitRotation = new SuperLegitRotation(this);
+    private final HvHRotation hvhRotation = new HvHRotation(this);
     private final TimerUtils backTimer = new TimerUtils();
 
     private long cps = 0;
@@ -137,7 +138,7 @@ public class Aura extends Module {
     private static final long ROTATION_HOLD_TIME = 0;
 
     public Aura() {
-        super("AttackAura", "Автоматически наводиться и бьёт таргета", ModuleCategory.COMBAT);
+        super("AttackAura", "[FunTime / HolyWorld / ReallyWorld / Spooky] Автоматическая атака с обходом античитов", ModuleCategory.COMBAT);
         addSettings(rotationType, targets, range, aimRange, elytraAimRange, smartCrit, sprintReset, syncTps,
                 attackOnEating, throughWalls, rwWallBypass, raycast, unpressShield, breakShield, clientLook, correctionType, priority);
     }
@@ -277,9 +278,12 @@ public class Aura extends Module {
                 sprintResetTicks = 0;
             }
         } else {
-            slothRotation.reset();
-            GrimLiteRotation.reset();
+            funTimeRotation.reset();
+            holyWorldRotation.reset();
+            reallyWorldRotation.reset();
             spookyTimeRotation.reset();
+            superLegitRotation.reset();
+            hvhRotation.reset();
             if (lastTargetRotation != null && targetLostTime == 0) {
                 targetLostTime = System.currentTimeMillis();
             }
@@ -327,30 +331,22 @@ public class Aura extends Module {
             return;
         }
         RotationsSystem system;
-        if (rotationType.is("Smooth")) {
-            system = new RotationsSystem() {
-                @Override
-                public void updateRotations(LivingEntity target) {
-                    Vec3d aimPoint = getPredictedRotationPoint(target, target.getBoundingBox().getCenter());
-                    Vec2f rot = RotationUtils.getRotations(aimPoint);
-                    targetRotations = rot;
-                    currentRotations = new Vec2f(mc.player.getYaw(), mc.player.getPitch());
-                    RotationStorage.update(new Rotation(rot.x, rot.y), 360, 360, 360, 360, 1, 1, clientLook.isState());
-                }
-            };
-        } else if (rotationType.is("GrimLite")) {
-            system = GrimLiteRotation;
-        } else if (rotationType.is("Sloth")) {
-            system = slothRotation;
+        if (rotationType.is("FunTime")) {
+            system = funTimeRotation;
+        } else if (rotationType.is("HolyWorld")) {
+            system = holyWorldRotation;
+        } else if (rotationType.is("ReallyWorld")) {
+            system = reallyWorldRotation;
         } else if (rotationType.is("SpookyTime")) {
             system = spookyTimeRotation;
+        } else if (rotationType.is("SuperLegit")) {
+            system = superLegitRotation;
+        } else if (rotationType.is("HvH")) {
+            system = hvhRotation;
         } else if (rotationType.is("NoRotate")) {
             system = new RotationsSystem() {
                 @Override
                 public void updateRotations(LivingEntity target) {
-                    // Do not submit a rotation task: FreeLook may hold a stale
-                    // yaw/pitch after a previous Aura rotation and makes the
-                    // camera drift during a manual Neuro recording.
                     if (RotationStorage.instance != null) RotationStorage.instance.stopRotation();
                     targetRotations = new Vec2f(mc.player.getYaw(), mc.player.getPitch());
                     currentRotations = targetRotations;
@@ -375,14 +371,7 @@ public class Aura extends Module {
                 }
             };
         } else {
-            Vec2f targetRot = RotationUtils.getRotations(getPredictedRotationPoint(target, target.getLeashPos(1)));
-            system = new RotationsSystem() {
-                @Override
-                public void updateRotations(LivingEntity target) {
-                    currentRotations = new Vec2f(mc.player.getYaw(), mc.player.getPitch());
-                    RotationStorage.update(new Rotation(targetRot.x, targetRot.y), 360, 360, 360, 360, 1, 1, clientLook.isState());
-                }
-            };
+            system = funTimeRotation;
         }
         system.updateRotations(target);
     }
@@ -498,9 +487,12 @@ public class Aura extends Module {
         boolean attacked = false;
         if (target instanceof PlayerEntity player && player.isBlocking() && breakShield.isState()) attacked = shieldBreak(player);
         if (!attacked) mc.interactionManager.attackEntity(mc.player, target);
-        if (rotationType.is("GrimLite")) GrimLiteRotation.onAttack();
-        if (rotationType.is("Sloth")) slothRotation.onAttack();
+        if (rotationType.is("FunTime")) funTimeRotation.onAttack();
+        if (rotationType.is("HolyWorld")) holyWorldRotation.onAttack();
+        if (rotationType.is("ReallyWorld")) reallyWorldRotation.onAttack();
         if (rotationType.is("SpookyTime")) spookyTimeRotation.onAttack();
+        if (rotationType.is("SuperLegit")) superLegitRotation.onAttack();
+        if (rotationType.is("HvH")) hvhRotation.onAttack();
         mc.player.swingHand(Hand.MAIN_HAND);
         long cooldown = 467L;
         if (syncTps.isState()) cooldown = (long) (getTpsAdjustedCooldown(cooldown) * 1.1f);
@@ -669,9 +661,12 @@ public class Aura extends Module {
     @Override
     public void onDisable() {
         super.onDisable();
-        slothRotation.reset();
-        GrimLiteRotation.reset();
+        funTimeRotation.reset();
+        holyWorldRotation.reset();
+        reallyWorldRotation.reset();
         spookyTimeRotation.reset();
+        superLegitRotation.reset();
+        hvhRotation.reset();
         if (target != null) backTimer.reset();
         target = null;
         dataSystem.resetState();
@@ -689,9 +684,12 @@ public class Aura extends Module {
     @Override
     public void onEnable() {
         super.onEnable();
-        slothRotation.reset();
-        GrimLiteRotation.reset();
+        funTimeRotation.reset();
+        holyWorldRotation.reset();
+        reallyWorldRotation.reset();
         spookyTimeRotation.reset();
+        superLegitRotation.reset();
+        hvhRotation.reset();
         dataSystem.resetState();
         lastDataTarget = null;
         needSprintReset = false;

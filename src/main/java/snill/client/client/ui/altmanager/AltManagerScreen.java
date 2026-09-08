@@ -1,38 +1,46 @@
 package snill.client.client.ui.altmanager;
 
+import com.mojang.blaze3d.systems.RenderSystem;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.text.Text;
+import net.minecraft.util.Identifier;
 import net.minecraft.util.math.MathHelper;
 import org.lwjgl.glfw.GLFW;
 import snill.client.Snill;
 import snill.client.api.QClient;
 import snill.client.api.storages.implement.alt.Alt;
-import snill.client.api.storages.implement.alt.AltStorage;
 import snill.client.api.utils.animation.AnimationUtils;
 import snill.client.api.utils.animation.Easings;
 import snill.client.api.utils.client.ClientSoundPlayer;
+import snill.client.api.utils.color.ColorUtils;
 import snill.client.api.utils.math.HoveringUtils;
 import snill.client.api.utils.render.RenderUtils;
 import snill.client.api.utils.render.fonts.msdf.Font;
 import snill.client.api.utils.render.fonts.msdf.Fonts;
-import com.mojang.blaze3d.systems.RenderSystem;
-import net.minecraft.client.render.*;
-import org.joml.Matrix4f;
-import org.lwjgl.opengl.GL11;
-import snill.client.api.utils.render.ShaderUtils;
 import snill.client.api.utils.scissor.ScissorUtils;
-import snill.client.client.ui.space.SpaceBackgroundRenderer;
-import java.text.SimpleDateFormat;
-import java.util.Date;
+
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Random;
 
 public class AltManagerScreen extends Screen implements QClient {
 
+    private static final Identifier MENU_BG = Identifier.of("snill", "textures/mainmenu/menu.png");
+    private static final int PARTICLE_COUNT = 60;
+
     private final Screen parent;
-    private final SpaceBackgroundRenderer spaceBackground = new SpaceBackgroundRenderer();
-    private final AnimationUtils openAnimation = new AnimationUtils(0f, 9.0f, Easings.CUBIC_OUT);
+    private final List<MenuParticle> particles = new ArrayList<>();
+    private final Random random = new Random();
+    private float smoothMouseX = 0f;
+    private float smoothMouseY = 0f;
+
+    // Hover animations
+    private final AnimationUtils backAnim = new AnimationUtils(0f, 10f, Easings.CUBIC_OUT);
+    private final AnimationUtils addAnim = new AnimationUtils(0f, 10f, Easings.CUBIC_OUT);
+    private final AnimationUtils randAnim = new AnimationUtils(0f, 10f, Easings.CUBIC_OUT);
+    private final AnimationUtils clipAnim = new AnimationUtils(0f, 10f, Easings.CUBIC_OUT);
 
     private String inputName = "";
     private boolean typing = false;
@@ -42,251 +50,393 @@ public class AltManagerScreen extends Screen implements QClient {
     private long statusMessageTime = 0L;
     private boolean statusSuccess = true;
 
-    private static final SimpleDateFormat DATE_FORMAT = new SimpleDateFormat("dd.MM.yyyy HH:mm");
+    // Window dimensions matching ocean theme
+    private static final float WIN_WIDTH = 440f;
+    private static final float WIN_HEIGHT = 240f;
 
     public AltManagerScreen(Screen parent) {
         super(Text.literal("Alt Manager"));
         this.parent = parent;
+        initParticles();
+    }
+
+    private void initParticles() {
+        particles.clear();
+        for (int i = 0; i < PARTICLE_COUNT; i++) {
+            particles.add(new MenuParticle(
+                    random.nextFloat(),
+                    random.nextFloat(),
+                    0.5f + random.nextFloat() * 1.8f,
+                    0.00025f + random.nextFloat() * 0.0006f,
+                    0.15f + random.nextFloat() * 0.5f,
+                    random.nextFloat() * ((float) Math.PI * 2f)
+            ));
+        }
     }
 
     @Override
     protected void init() {
-        openAnimation.setValue(0f);
-        openAnimation.update(1f);
+        scrollOffset = 0f;
+        targetScroll = 0f;
     }
 
     @Override
     public void render(DrawContext context, int mouseX, int mouseY, float delta) {
         MatrixStack matrices = context.getMatrices();
-        int width = mc.getWindow().getScaledWidth();
-        int height = mc.getWindow().getScaledHeight();
+        int width = this.width;
+        int height = this.height;
+        long time = System.currentTimeMillis();
 
-        // 1. Live Animated Space Background
-        spaceBackground.render(context, mouseX, mouseY, delta);
+        smoothMouseX = MathHelper.lerp(0.06f, smoothMouseX, (float) mouseX);
+        smoothMouseY = MathHelper.lerp(0.06f, smoothMouseY, (float) mouseY);
 
-        scrollOffset = MathHelper.lerp(0.12f, scrollOffset, targetScroll);
+        float parallaxX = (smoothMouseX - width * 0.5f) * 0.012f;
+        float parallaxY = (smoothMouseY - height * 0.5f) * 0.012f;
 
-        Font titleFont = Fonts.getFont("suisse", 17);
-        Font subFont = Fonts.getFont("suisse", 11);
-        Font textFont = Fonts.getFont("suisse", 11);
-        Font smallFont = Fonts.getFont("suisse", 9);
+        // 1. Cinematic volumetric ocean & light rays background (identical to main menu)
+        RenderSystem.enableBlend();
+        RenderSystem.defaultBlendFunc();
+        RenderUtils.drawImage(matrices, MENU_BG, -15f + parallaxX, -15f + parallaxY, width + 30f, height + 30f, 0xFFFFFFFF);
+
+        // 2. Ambient rising particles (underwater motes in light rays)
+        for (MenuParticle p : particles) {
+            p.y -= p.speed;
+            if (p.y < -0.05f) {
+                p.y = 1.05f;
+                p.x = random.nextFloat();
+            }
+            float px = p.x * width + (float) Math.sin(time * 0.001f + p.phase) * 10f;
+            float py = p.y * height;
+            float pAlpha = p.alpha * (0.6f + 0.4f * (float) Math.sin(time * 0.002f + p.phase));
+            int pColor = ColorUtils.rgba(160, 200, 255, (int) (pAlpha * 255));
+            RenderUtils.drawRoundCircle(matrices, px, py, p.size, pColor);
+        }
+
+        scrollOffset = MathHelper.lerp(0.14f, scrollOffset, targetScroll);
+
+        Font titleFont = Fonts.getFont("suisse", 14);
+        if (titleFont == null) titleFont = Fonts.getFont("moe3", 14);
+        Font btnFont = Fonts.getFont("suisse", 10);
+        if (btnFont == null) btnFont = Fonts.getFont("moe3", 10);
+        Font subFont = Fonts.getFont("suisse", 9);
+        Font microFont = Fonts.getFont("suisse", 8);
 
         String currentUsername = mc.getSession() != null ? mc.getSession().getUsername() : "Player";
 
-        // Compact Header Glass Panel
-        float headerWidth = Math.min(width - 32, 540);
-        float headerX = (width - headerWidth) / 2f;
-        float headerY = 12f;
-        float headerH = 38f;
+        // 3. Central Ocean Glass Window
+        float winX = (width - WIN_WIDTH) / 2f;
+        float winY = (height - WIN_HEIGHT) / 2f;
 
-        RenderUtils.drawGradientRect(matrices, headerX, headerY, headerWidth, headerH, 8f,
-                0x7018142A, 0x70120F20, 0x70120F20, 0x7018142A);
-        RenderUtils.drawRoundedRectOutline(matrices, headerX, headerY, headerWidth, headerH, 8f, 0.9f, 0x358B5CF6);
+        // Glass shadow & panel background
+        RenderUtils.drawShadow(matrices, winX, winY, WIN_WIDTH, WIN_HEIGHT, 8f, 16f,
+                0x301D4ED8, 0x252563EB, 0x203B82F6, 0x301D4ED8);
+        RenderUtils.drawBlur(matrices, winX, winY, WIN_WIDTH, WIN_HEIGHT, 8f, 6f, ColorUtils.rgba(5, 8, 18, 130));
+        RenderUtils.drawGradientRect(matrices, winX, winY, WIN_WIDTH, WIN_HEIGHT, 8f,
+                0x500A1022, 0x3D060A16, 0x3D060A16, 0x500A1022);
+        RenderUtils.drawRoundedRectOutline(matrices, winX, winY, WIN_WIDTH, WIN_HEIGHT, 8f, 0.8f, 0x24406596);
 
+        // 4. Header
         // Back Button
-        float backX = headerX + 8f;
-        float backY = headerY + 8f;
-        float backW = 58f;
-        float backH = 22f;
+        float backX = winX + 12f;
+        float backY = winY + 8f;
+        float backW = 60f;
+        float backH = 20f;
         boolean backHover = HoveringUtils.isHovered(mouseX, mouseY, backX, backY, backW, backH);
-        int backBg = backHover ? 0xCC7C3AED : 0x50251B40;
-        RenderUtils.drawRoundedRect(matrices, backX, backY, backW, backH, 5f, backBg);
-        RenderUtils.drawRoundedRectOutline(matrices, backX, backY, backW, backH, 5f, 0.8f, backHover ? 0xFFC084FC : 0x358B5CF6);
-        subFont.drawCenteredString(matrices, "Назад", backX + backW / 2f, backY + 6f, 0xFFFFFFFF);
+        backAnim.update(backHover ? 1f : 0f);
+        float backP = backAnim.getValue();
 
-        // Title text
-        float titleX = width / 2f;
-        titleFont.drawCenteredString(matrices, "ALT MANAGER", titleX, headerY + 7f, 0xFFFFFFFF);
-        int statusDotColor = 0xFF22C55E;
-        RenderUtils.drawRoundCircle(matrices, titleX - 65f, headerY + 26f, 5f, statusDotColor);
-        subFont.drawString(matrices, "Текущий ник: " + currentUsername, titleX - 56f, headerY + 22f, 0xFFC4B5FD);
+        int backBg = ColorUtils.interpolateColor(ColorUtils.rgba(10, 16, 32, 45), ColorUtils.rgba(26, 46, 92, 95), backP);
+        int backBorder = ColorUtils.interpolateColor(ColorUtils.rgba(60, 95, 155, 30), ColorUtils.rgba(96, 165, 250, 140), backP);
+        RenderUtils.drawRoundedRect(matrices, backX, backY, backW, backH, 4f, backBg);
+        RenderUtils.drawRoundedRectOutline(matrices, backX, backY, backW, backH, 4f, 0.6f + backP * 0.3f, backBorder);
+        if (backP > 0.05f) {
+            RenderUtils.drawShadow(matrices, backX, backY, backW, backH, 4f, 5f * backP, 0x253B82F6, 0x253B82F6, 0x253B82F6, 0x253B82F6);
+        }
+        if (subFont != null) {
+            int backTextCol = ColorUtils.interpolateColor(0xFFCBD5E1, 0xFFFFFFFF, backP);
+            subFont.drawCenteredString(matrices, "‹ Назад", backX + backW / 2f, backY + 9.5f, backTextCol);
+        }
 
-        // Compact Main Layout: Left Accounts List & Right Actions Panel
-        float contentY = headerY + headerH + 10f;
-        float contentH = height - contentY - 16f;
-        float listW = headerWidth * 0.58f;
-        float actionW = headerWidth - listW - 10f;
-        float listX = headerX;
-        float actionX = listX + listW + 10f;
+        // Title: ALT MANAGER
+        if (titleFont != null) {
+            float titleX = width / 2f;
+            titleFont.drawCenteredString(matrices, "ALT MANAGER", titleX + 0.5f, winY + 12.5f, 0x60000000);
+            titleFont.drawCenteredString(matrices, "ALT MANAGER", titleX, winY + 12f, 0xFFFFFFFF);
+        }
 
-        // --- LEFT SIDE: Accounts List ---
-        RenderUtils.drawGradientRect(matrices, listX, contentY, listW, contentH, 8f,
-                0x60141024, 0x600E0B1A, 0x600E0B1A, 0x60141024);
-        RenderUtils.drawRoundedRectOutline(matrices, listX, contentY, listW, contentH, 8f, 0.8f, 0x258B5CF6);
+        // Active User Widget (Top Right)
+        float profW = 115f;
+        float profH = 20f;
+        float profX = winX + WIN_WIDTH - profW - 12f;
+        float profY = winY + 8f;
+        RenderUtils.drawRoundedRect(matrices, profX, profY, profW, profH, 4f, ColorUtils.rgba(10, 16, 32, 50));
+        RenderUtils.drawRoundedRectOutline(matrices, profX, profY, profW, profH, 4f, 0.6f, 0x30406596);
 
-        subFont.drawString(matrices, "Сохраненные аккаунты", listX + 12f, contentY + 9f, 0xFFE2E8F0);
+        float headSize = 14f;
+        float headX = profX + 3f;
+        float headY = profY + (profH - headSize) / 2f;
+        RenderUtils.drawPlayerHead(matrices, currentUsername, headX, headY, headSize, 2f);
+        RenderUtils.drawRoundedRectOutline(matrices, headX, headY, headSize, headSize, 2f, 0.5f, 0x4060A5FA);
 
-        AltStorage storage = Snill.INSTANCE.altStorage;
-        List<Alt> alts = storage != null ? storage.getAlts() : List.of();
+        float textX = headX + headSize + 4f;
+        if (microFont != null) {
+            microFont.drawString(matrices, currentUsername, textX, profY + 5.5f, 0xFFFFFFFF);
+        }
+        RenderUtils.drawRoundCircle(matrices, textX + 1.5f, profY + 15.5f, 1.8f, 0xFF22C55E);
+        if (microFont != null) {
+            microFont.drawString(matrices, "В сети", textX + 6f, profY + 14f, 0xFF94A3B8);
+        }
 
-        // Scrollable region
-        float cardStartY = contentY + 26f;
-        float cardAreaH = contentH - 34f;
+        // Header Separator Line
+        float sepY = winY + 32f;
+        RenderUtils.drawGradientRect(matrices, winX + 12f, sepY, WIN_WIDTH - 24f, 0.8f, 0.4f,
+                0x0A3B82F6, 0x403B82F6, 0x403B82F6, 0x0A3B82F6);
+
+        // 5. Left Column: Saved Accounts
+        float leftX = winX + 12f;
+        float leftY = sepY + 8f;
+        float leftW = 245f;
+        float leftH = WIN_HEIGHT - 48f;
+
+        List<Alt> alts = Snill.INSTANCE.altStorage != null ? Snill.INSTANCE.altStorage.getAlts() : new ArrayList<>();
+        if (subFont != null) {
+            subFont.drawString(matrices, "СОХРАНЕННЫЕ АККАУНТЫ", leftX, leftY + 1f, 0xFFBAC7D5);
+            if (microFont != null) {
+                microFont.drawString(matrices, "[" + alts.size() + "]", leftX + 116f, leftY + 2f, 0xFF60A5FA);
+            }
+        }
+
+        float listY = leftY + 14f;
+        float listH = leftH - 14f;
+        RenderUtils.drawRoundedRect(matrices, leftX, listY, leftW, listH, 5f, ColorUtils.rgba(6, 10, 20, 50));
+        RenderUtils.drawRoundedRectOutline(matrices, leftX, listY, leftW, listH, 5f, 0.6f, 0x1A406596);
+
+        float itemH = 28f;
+        float itemSpacing = 3.5f;
+        float totalContentH = alts.size() * (itemH + itemSpacing);
+        float maxScroll = Math.max(0f, totalContentH - listH + 4f);
+        targetScroll = MathHelper.clamp(targetScroll, -maxScroll, 0f);
+
         ScissorUtils.push();
-        ScissorUtils.setFromComponentCoordinates(listX, cardStartY, listW, cardAreaH);
-
-        float currentCardY = cardStartY + scrollOffset;
-        float cardH = 34f;
-        float cardW = listW - 16f;
-        float cardX = listX + 8f;
+        ScissorUtils.setFromComponentCoordinates((double) leftX, (double) (listY + 2f), (double) leftW, (double) (listH - 4f));
 
         for (int i = 0; i < alts.size(); i++) {
             Alt alt = alts.get(i);
-            boolean isCurrent = alt.getUsername().equalsIgnoreCase(currentUsername);
-            boolean cardHover = HoveringUtils.isHovered(mouseX, mouseY, cardX, currentCardY, cardW, cardH)
-                    && mouseY >= cardStartY && mouseY <= cardStartY + cardAreaH;
+            float cardY = listY + 3f + i * (itemH + itemSpacing) + scrollOffset;
 
-            int cardBg = isCurrent ? 0x852E1065 : (cardHover ? 0x65201A38 : 0x40130F24);
-            int borderCol = isCurrent ? 0xFFA855F7 : (cardHover ? 0x60A855F7 : 0x208B5CF6);
+            if (cardY + itemH < listY || cardY > listY + listH) continue;
 
-            RenderUtils.drawRoundedRect(matrices, cardX, currentCardY, cardW, cardH, 5f, cardBg);
-            RenderUtils.drawRoundedRectOutline(matrices, cardX, currentCardY, cardW, cardH, 5f, 0.8f, borderCol);
+            boolean cardHover = HoveringUtils.isHovered(mouseX, mouseY, leftX + 3f, cardY, leftW - 6f, itemH);
+            boolean isActive = alt.getUsername().equalsIgnoreCase(currentUsername);
 
-            // Head avatar
-            float headX = cardX + 6f;
-            float headY = currentCardY + 5f;
-            float headSize = 24f;
-            RenderUtils.drawPlayerHead(matrices, alt.getUsername(), headX, headY, headSize, 3f);
-            RenderUtils.drawRoundedRectOutline(matrices, headX, headY, headSize, headSize, 3f, 0.8f, 0x40A855F7);
+            int cardBg = isActive ? ColorUtils.rgba(14, 30, 60, 80) :
+                    (cardHover ? ColorUtils.rgba(16, 28, 54, 70) : ColorUtils.rgba(10, 16, 32, 35));
+            int cardBorder = isActive ? 0x6060A5FA :
+                    (cardHover ? 0x4060A5FA : 0x15406596);
 
-            // Username
-            subFont.drawString(matrices, alt.getUsername(), headX + headSize + 6f, currentCardY + 6f, isCurrent ? 0xFFF0ABFC : 0xFFFFFFFF);
+            RenderUtils.drawRoundedRect(matrices, leftX + 3f, cardY, leftW - 6f, itemH, 4f, cardBg);
+            RenderUtils.drawRoundedRectOutline(matrices, leftX + 3f, cardY, leftW - 6f, itemH, 4f, 0.6f, cardBorder);
 
-            // Date / Status
-            String dateStr = DATE_FORMAT.format(new Date(alt.getAddedDate()));
-            smallFont.drawString(matrices, isCurrent ? "Активен" : dateStr, headX + headSize + 6f, currentCardY + 19f, isCurrent ? 0xFF4ADE80 : 0xFF94A3B8);
-
-            // Delete button
-            float btnDelW = 18f;
-            float btnDelH = 18f;
-            float btnDelX = cardX + cardW - btnDelW - 6f;
-            float btnDelY = currentCardY + (cardH - btnDelH) / 2f;
-            boolean delHover = HoveringUtils.isHovered(mouseX, mouseY, btnDelX, btnDelY, btnDelW, btnDelH)
-                    && mouseY >= cardStartY && mouseY <= cardStartY + cardAreaH;
-
-            RenderUtils.drawRoundedRect(matrices, btnDelX, btnDelY, btnDelW, btnDelH, 4f,
-                    delHover ? 0xFFE11D48 : 0x85BE123C);
-            RenderUtils.drawRoundedRectOutline(matrices, btnDelX, btnDelY, btnDelW, btnDelH, 4f, 0.8f,
-                    delHover ? 0xFFFDA4AF : 0x40FB7185);
-
-            float crossPad = 5.0f;
-            float cx1 = btnDelX + crossPad;
-            float cy1 = btnDelY + crossPad;
-            float cx2 = btnDelX + btnDelW - crossPad;
-            float cy2 = btnDelY + btnDelH - crossPad;
-
-            RenderSystem.enableBlend();
-            RenderSystem.blendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
-            RenderSystem.setShader(ShaderUtils.sonar);
-            BufferBuilder crossBuf = Tessellator.getInstance().begin(VertexFormat.DrawMode.DEBUG_LINES, VertexFormats.POSITION_COLOR);
-            Matrix4f crossMatrix = matrices.peek().getPositionMatrix();
-            int crossColor = delHover ? 0xFFFFFFFF : 0xFFFEE2E2;
-
-            crossBuf.vertex(crossMatrix, cx1, cy1, 0f).color(crossColor);
-            crossBuf.vertex(crossMatrix, cx2, cy2, 0f).color(crossColor);
-            crossBuf.vertex(crossMatrix, cx2, cy1, 0f).color(crossColor);
-            crossBuf.vertex(crossMatrix, cx1, cy2, 0f).color(crossColor);
-
-            BufferRenderer.drawWithGlobalProgram(crossBuf.end());
-            RenderSystem.defaultBlendFunc();
-
-            if (!isCurrent) {
-                float btnLoginW = 44f;
-                float btnLoginH = 18f;
-                float btnLoginX = btnDelX - btnLoginW - 4f;
-                float btnLoginY = currentCardY + (cardH - btnLoginH) / 2f;
-                boolean loginHover = HoveringUtils.isHovered(mouseX, mouseY, btnLoginX, btnLoginY, btnLoginW, btnLoginH)
-                        && mouseY >= cardStartY && mouseY <= cardStartY + cardAreaH;
-
-                int loginBg = loginHover ? 0xCC7C3AED : 0x457C3AED;
-                RenderUtils.drawRoundedRect(matrices, btnLoginX, btnLoginY, btnLoginW, btnLoginH, 4f, loginBg);
-                RenderUtils.drawRoundedRectOutline(matrices, btnLoginX, btnLoginY, btnLoginW, btnLoginH, 4f, 0.8f, loginHover ? 0xFFC084FC : 0x358B5CF6);
-                smallFont.drawCenteredString(matrices, "Войти", btnLoginX + btnLoginW / 2f, btnLoginY + 5f, 0xFFFFFFFF);
+            if (isActive) {
+                RenderUtils.drawRoundedRect(matrices, leftX + 3f, cardY + 2f, 1.5f, itemH - 4f, 0.75f, 0xFF60A5FA);
             }
 
-            currentCardY += cardH + 5f;
+            // Head Avatar
+            float cHeadSize = 18f;
+            float cHeadX = leftX + 8f;
+            float cHeadY = cardY + (itemH - cHeadSize) / 2f;
+            RenderUtils.drawPlayerHead(matrices, alt.getUsername(), cHeadX, cHeadY, cHeadSize, 2.5f);
+            RenderUtils.drawRoundedRectOutline(matrices, cHeadX, cHeadY, cHeadSize, cHeadSize, 2.5f, 0.5f,
+                    isActive ? 0x8060A5FA : 0x25406596);
+
+            // Alt Name & Status (properly vertically centered)
+            float cTextX = cHeadX + cHeadSize + 6f;
+            if (btnFont != null) {
+                int nameCol = isActive ? 0xFFFFFFFF : (cardHover ? 0xFFF1F5F9 : 0xFFCBD5E1);
+                btnFont.drawString(matrices, alt.getUsername(), cTextX, cardY + 7.5f, nameCol);
+            }
+
+            if (microFont != null) {
+                if (isActive) {
+                    RenderUtils.drawRoundCircle(matrices, cTextX + 1.5f, cardY + 19.5f, 1.8f, 0xFF22C55E);
+                    microFont.drawString(matrices, "Активен", cTextX + 6f, cardY + 18f, 0xFF22C55E);
+                } else {
+                    microFont.drawString(matrices, "Нажмите для входа", cTextX, cardY + 18f, 0x6094A3B8);
+                }
+            }
+
+            // Delete button on the right (Ruby red hover)
+            float delSize = 15f;
+            float delX = leftX + leftW - delSize - 8f;
+            float delY = cardY + (itemH - delSize) / 2f;
+            boolean delHover = HoveringUtils.isHovered(mouseX, mouseY, delX, delY, delSize, delSize);
+
+            int delBg = delHover ? ColorUtils.rgba(160, 24, 52, 90) : ColorUtils.rgba(30, 10, 16, 25);
+            int delBorder = delHover ? ColorUtils.rgba(251, 113, 133, 140) : ColorUtils.rgba(244, 63, 94, 25);
+            RenderUtils.drawRoundedRect(matrices, delX, delY, delSize, delSize, 3f, delBg);
+            RenderUtils.drawRoundedRectOutline(matrices, delX, delY, delSize, delSize, 3f, 0.5f, delBorder);
+
+            if (microFont != null) {
+                int delTextCol = delHover ? 0xFFFFFFFF : 0x80F43F5E;
+                microFont.drawCenteredString(matrices, "×", delX + delSize / 2f, delY + 7.0f, delTextCol);
+            }
         }
 
-        ScissorUtils.unset();
         ScissorUtils.pop();
+        ScissorUtils.unset();
 
-        // Max scroll
-        float totalCardsH = alts.size() * (cardH + 5f);
-        float minScroll = Math.min(0f, cardAreaH - totalCardsH);
-        if (targetScroll < minScroll) targetScroll = minScroll;
-        if (targetScroll > 0f) targetScroll = 0f;
+        // Scrollbar if needed
+        if (maxScroll > 0f) {
+            float barW = 2f;
+            float barX = leftX + leftW - barW - 2f;
+            float barTrackH = listH - 6f;
+            float barThumbH = Math.max(16f, barTrackH * (listH / totalContentH));
+            float barProgress = -scrollOffset / maxScroll;
+            float barThumbY = listY + 3f + (barTrackH - barThumbH) * barProgress;
 
-        // --- RIGHT SIDE: Action Controls Panel ---
-        RenderUtils.drawGradientRect(matrices, actionX, contentY, actionW, contentH, 8f,
-                0x60141024, 0x600E0B1A, 0x600E0B1A, 0x60141024);
-        RenderUtils.drawRoundedRectOutline(matrices, actionX, contentY, actionW, contentH, 8f, 0.8f, 0x258B5CF6);
-
-        float actPadX = actionX + 10f;
-        float actPadW = actionW - 20f;
-        float actCurY = contentY + 10f;
-
-        subFont.drawString(matrices, "Добавить аккаунт", actPadX, actCurY, 0xFFE2E8F0);
-        actCurY += 18f;
-
-        // Input field
-        float inputH = 26f;
-        boolean inputHover = HoveringUtils.isHovered(mouseX, mouseY, actPadX, actCurY, actPadW, inputH);
-        int inputBg = typing ? 0x75241C42 : 0x40181330;
-        int inputBorder = typing ? 0xFFA855F7 : (inputHover ? 0x608B5CF6 : 0x258B5CF6);
-
-        RenderUtils.drawRoundedRect(matrices, actPadX, actCurY, actPadW, inputH, 5f, inputBg);
-        RenderUtils.drawRoundedRectOutline(matrices, actPadX, actCurY, actPadW, inputH, 5f, 0.9f, inputBorder);
-
-        String renderText = inputName.isEmpty() ? (typing ? "" : "Введите никнейм...") : inputName;
-        int textColor = inputName.isEmpty() && !typing ? 0xFF64748B : 0xFFFFFFFF;
-        textFont.drawString(matrices, renderText, actPadX + 7f, actCurY + 8f, textColor);
-
-        if (typing && (System.currentTimeMillis() / 450) % 2 == 0) {
-            float cursorX = actPadX + 7f + textFont.getStringWidth(inputName);
-            RenderUtils.drawRoundedRect(matrices, cursorX + 1f, actCurY + 6f, 1.2f, 14f, 0f, 0xFFA855F7);
+            RenderUtils.drawRoundedRect(matrices, barX, barThumbY, barW, barThumbH, 1f, 0x4060A5FA);
         }
 
-        actCurY += inputH + 8f;
+        // 6. Right Column: Add Account & Quick Actions
+        float rightX = leftX + leftW + 12f;
+        float rightY = sepY + 8f;
+        float rightW = WIN_WIDTH - leftW - 36f;
 
-        // Button: Add & Login
-        float btnH = 24f;
-        boolean addHover = HoveringUtils.isHovered(mouseX, mouseY, actPadX, actCurY, actPadW, btnH);
-        int addBg = addHover ? 0xEE7C3AED : 0x806D28D9;
-        RenderUtils.drawRoundedRect(matrices, actPadX, actCurY, actPadW, btnH, 5f, addBg);
-        RenderUtils.drawRoundedRectOutline(matrices, actPadX, actCurY, actPadW, btnH, 5f, 0.9f, addHover ? 0xFFC084FC : 0x408B5CF6);
-        subFont.drawCenteredString(matrices, "Войти и сохранить", actPadX + actPadW / 2f, actCurY + 7f, 0xFFFFFFFF);
+        if (subFont != null) {
+            subFont.drawString(matrices, "ДОБАВИТЬ АККАУНТ", rightX, rightY + 1f, 0xFFBAC7D5);
+        }
 
-        actCurY += btnH + 16f;
-        smallFont.drawString(matrices, "БЫСТРЫЕ ДЕЙСТВИЯ", actPadX, actCurY, 0xFF94A3B8);
-        actCurY += 12f;
+        // Input Box
+        float inY = rightY + 14f;
+        float inH = 22f;
+        boolean inHover = HoveringUtils.isHovered(mouseX, mouseY, rightX, inY, rightW, inH);
 
-        // Button: Random Nick
-        boolean randHover = HoveringUtils.isHovered(mouseX, mouseY, actPadX, actCurY, actPadW, btnH);
-        int randBg = randHover ? 0x804338CA : 0x45312E81;
-        RenderUtils.drawRoundedRect(matrices, actPadX, actCurY, actPadW, btnH, 5f, randBg);
-        RenderUtils.drawRoundedRectOutline(matrices, actPadX, actCurY, actPadW, btnH, 5f, 0.8f, randHover ? 0xFF818CF8 : 0x304338CA);
-        subFont.drawCenteredString(matrices, "🎲 Случайный ник", actPadX + actPadW / 2f, actCurY + 7f, 0xFFFFFFFF);
+        int inBg = ColorUtils.rgba(10, 16, 32, 50);
+        int inBorder = typing ? 0x9060A5FA : (inHover ? 0x5060A5FA : 0x24406596);
 
-        actCurY += btnH + 6f;
+        RenderUtils.drawRoundedRect(matrices, rightX, inY, rightW, inH, 4f, inBg);
+        RenderUtils.drawRoundedRectOutline(matrices, rightX, inY, rightW, inH, 4f, typing ? 0.8f : 0.6f, inBorder);
 
-        // Button: Clipboard
-        boolean clipHover = HoveringUtils.isHovered(mouseX, mouseY, actPadX, actCurY, actPadW, btnH);
-        int clipBg = clipHover ? 0x800E7490 : 0x45155E75;
-        RenderUtils.drawRoundedRect(matrices, actPadX, actCurY, actPadW, btnH, 5f, clipBg);
-        RenderUtils.drawRoundedRectOutline(matrices, actPadX, actCurY, actPadW, btnH, 5f, 0.8f, clipHover ? 0xFF22D3EE : 0x300E7490);
-        subFont.drawCenteredString(matrices, "📋 Из буфера обмена", actPadX + actPadW / 2f, actCurY + 7f, 0xFFFFFFFF);
+        if (subFont != null) {
+            if (inputName.isEmpty() && !typing) {
+                subFont.drawString(matrices, "Введите никнейм...", rightX + 8f, inY + 10.5f, 0x6094A3B8);
+            } else {
+                subFont.drawString(matrices, inputName, rightX + 8f, inY + 10.5f, 0xFFFFFFFF);
+                if (typing && (System.currentTimeMillis() % 1000L < 500L)) {
+                    float cursorX = rightX + 8f + subFont.getStringWidth(inputName);
+                    RenderUtils.drawRoundedRect(matrices, cursorX + 1f, inY + 5.5f, 1f, inH - 11f, 0.5f, 0xFF60A5FA);
+                }
+            }
+        }
 
-        // Toast Notification
-        if (System.currentTimeMillis() - statusMessageTime < 3000L && !statusMessage.isEmpty()) {
-            float toastW = headerWidth * 0.7f;
-            float toastH = 22f;
+        // "Войти и сохранить" Button
+        float addY = inY + inH + 6f;
+        float addH = 20f;
+        boolean addHover = HoveringUtils.isHovered(mouseX, mouseY, rightX, addY, rightW, addH);
+        addAnim.update(addHover ? 1f : 0f);
+        float addP = addAnim.getValue();
+
+        int addBg = ColorUtils.interpolateColor(ColorUtils.rgba(29, 78, 216, 85), ColorUtils.rgba(37, 99, 235, 110), addP);
+        int addBorder = ColorUtils.interpolateColor(ColorUtils.rgba(96, 165, 250, 100), ColorUtils.rgba(147, 197, 253, 160), addP);
+
+        if (addP > 0.05f) {
+            RenderUtils.drawShadow(matrices, rightX, addY, rightW, addH, 5f, 6f * addP, 0x302563EB, 0x302563EB, 0x302563EB, 0x302563EB);
+        }
+        RenderUtils.drawRoundedRect(matrices, rightX, addY, rightW, addH, 4f, addBg);
+        RenderUtils.drawRoundedRectOutline(matrices, rightX, addY, rightW, addH, 4f, 0.6f + addP * 0.3f, addBorder);
+
+        if (btnFont != null) {
+            int addTextCol = ColorUtils.interpolateColor(0xFFE2E8F0, 0xFFFFFFFF, addP);
+            btnFont.drawCenteredString(matrices, "Войти и сохранить", rightX + rightW / 2f, addY + 9.5f, addTextCol);
+        }
+
+        // Separator: БЫСТРЫЕ ДЕЙСТВИЯ
+        float sep2Y = addY + addH + 12f;
+        RenderUtils.drawGradientRect(matrices, rightX, sep2Y, rightW, 0.8f, 0.4f,
+                0x0A3B82F6, 0x303B82F6, 0x303B82F6, 0x0A3B82F6);
+
+        if (microFont != null) {
+            microFont.drawString(matrices, "БЫСТРЫЕ ДЕЙСТВИЯ", rightX, sep2Y + 8f, 0x8594A3B8);
+        }
+
+        // "Случайный ник" Button
+        float randY = sep2Y + 20f;
+        float randH = 20f;
+        boolean randHover = HoveringUtils.isHovered(mouseX, mouseY, rightX, randY, rightW, randH);
+        randAnim.update(randHover ? 1f : 0f);
+        float randP = randAnim.getValue();
+
+        int randBg = ColorUtils.interpolateColor(ColorUtils.rgba(10, 16, 32, 45), ColorUtils.rgba(26, 46, 92, 95), randP);
+        int randBorder = ColorUtils.interpolateColor(ColorUtils.rgba(60, 95, 155, 30), ColorUtils.rgba(96, 165, 250, 140), randP);
+
+        if (randP > 0.05f) {
+            RenderUtils.drawShadow(matrices, rightX, randY, rightW, randH, 4f, 5f * randP, 0x253B82F6, 0x253B82F6, 0x253B82F6, 0x253B82F6);
+        }
+        RenderUtils.drawRoundedRect(matrices, rightX, randY, rightW, randH, 4f, randBg);
+        RenderUtils.drawRoundedRectOutline(matrices, rightX, randY, rightW, randH, 4f, 0.6f + randP * 0.3f, randBorder);
+
+        if (btnFont != null) {
+            int randTextCol = ColorUtils.interpolateColor(0xFFCBD5E1, 0xFFFFFFFF, randP);
+            btnFont.drawCenteredString(matrices, "Случайный ник", rightX + rightW / 2f, randY + 9.5f, randTextCol);
+        }
+
+        // "Из буфера обмена" Button
+        float clipY = randY + randH + 6f;
+        float clipH = 20f;
+        boolean clipHover = HoveringUtils.isHovered(mouseX, mouseY, rightX, clipY, rightW, clipH);
+        clipAnim.update(clipHover ? 1f : 0f);
+        float clipP = clipAnim.getValue();
+
+        int clipBg = ColorUtils.interpolateColor(ColorUtils.rgba(10, 16, 32, 45), ColorUtils.rgba(26, 46, 92, 95), clipP);
+        int clipBorder = ColorUtils.interpolateColor(ColorUtils.rgba(60, 95, 155, 30), ColorUtils.rgba(96, 165, 250, 140), clipP);
+
+        if (clipP > 0.05f) {
+            RenderUtils.drawShadow(matrices, rightX, clipY, rightW, clipH, 4f, 5f * clipP, 0x253B82F6, 0x253B82F6, 0x253B82F6, 0x253B82F6);
+        }
+        RenderUtils.drawRoundedRect(matrices, rightX, clipY, rightW, clipH, 4f, clipBg);
+        RenderUtils.drawRoundedRectOutline(matrices, rightX, clipY, rightW, clipH, 4f, 0.6f + clipP * 0.3f, clipBorder);
+
+        if (btnFont != null) {
+            int clipTextCol = ColorUtils.interpolateColor(0xFFCBD5E1, 0xFFFFFFFF, clipP);
+            btnFont.drawCenteredString(matrices, "Из буфера обмена", rightX + rightW / 2f, clipY + 9.5f, clipTextCol);
+        }
+
+        // 7. Toast Notification (Bottom Center)
+        long elapsed = time - statusMessageTime;
+        if (elapsed < 3000L && !statusMessage.isEmpty()) {
+            float toastAlpha = elapsed < 300L ? (elapsed / 300f) :
+                    (elapsed > 2600L ? (1f - (elapsed - 2600f) / 400f) : 1f);
+            toastAlpha = MathHelper.clamp(toastAlpha, 0f, 1f);
+
+            float toastW = subFont != null ? subFont.getStringWidth(statusMessage) + 24f : 140f;
+            float toastH = 20f;
             float toastX = (width - toastW) / 2f;
-            float toastY = height - toastH - 8f;
-            int toastBg = statusSuccess ? 0xD014532D : 0xD07F1D1D;
-            int toastBorder = statusSuccess ? 0xFF4ADE80 : 0xFFF87171;
-            RenderUtils.drawRoundedRect(matrices, toastX, toastY, toastW, toastH, 5f, toastBg);
-            RenderUtils.drawRoundedRectOutline(matrices, toastX, toastY, toastW, toastH, 5f, 0.8f, toastBorder);
-            subFont.drawCenteredString(matrices, statusMessage, toastX + toastW / 2f, toastY + 5f, 0xFFFFFFFF);
+            float toastY = height - 28f;
+
+            int tBg = ColorUtils.rgba(8, 14, 28, (int) (toastAlpha * 180));
+            int tBorder = statusSuccess ?
+                    ColorUtils.rgba(34, 197, 94, (int) (toastAlpha * 140)) :
+                    ColorUtils.rgba(239, 68, 68, (int) (toastAlpha * 140));
+
+            RenderUtils.drawBlur(matrices, toastX, toastY, toastW, toastH, 4f, 4f, ColorUtils.rgba(5, 8, 18, (int) (toastAlpha * 120)));
+            RenderUtils.drawRoundedRect(matrices, toastX, toastY, toastW, toastH, 4f, tBg);
+            RenderUtils.drawRoundedRectOutline(matrices, toastX, toastY, toastW, toastH, 4f, 0.6f, tBorder);
+
+            int dotCol = statusSuccess ?
+                    ColorUtils.rgba(34, 197, 94, (int) (toastAlpha * 255)) :
+                    ColorUtils.rgba(239, 68, 68, (int) (toastAlpha * 255));
+            RenderUtils.drawRoundCircle(matrices, toastX + 8f, toastY + 10f, 2f, dotCol);
+
+            if (subFont != null) {
+                int textCol = ColorUtils.rgba(241, 245, 249, (int) (toastAlpha * 255));
+                subFont.drawString(matrices, statusMessage, toastX + 15f, toastY + 9.5f, textCol);
+            }
+        }
+
+        // 8. Footer
+        if (subFont != null) {
+            subFont.drawString(matrices, "SNILL Client • Fabric 1.21.4", 14f, height - 12f, 0x6594A3B8);
+            subFont.drawRight(matrices, "Нажмите Esc для возврата", width - 14f, height - 12f, 0x7594A3B8);
         }
     }
 
@@ -294,132 +444,102 @@ public class AltManagerScreen extends Screen implements QClient {
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
         if (button != 0) return super.mouseClicked(mouseX, mouseY, button);
 
-        int width = mc.getWindow().getScaledWidth();
-        int height = mc.getWindow().getScaledHeight();
-        float headerWidth = Math.min(width - 32, 540);
-        float headerX = (width - headerWidth) / 2f;
-        float headerY = 12f;
+        float winX = (this.width - WIN_WIDTH) / 2f;
+        float winY = (this.height - WIN_HEIGHT) / 2f;
 
-        // Back Button
-        float backX = headerX + 8f;
-        float backY = headerY + 8f;
-        float backW = 58f;
-        float backH = 22f;
+        // Back button
+        float backX = winX + 12f;
+        float backY = winY + 8f;
+        float backW = 60f;
+        float backH = 20f;
         if (HoveringUtils.isHovered(mouseX, mouseY, backX, backY, backW, backH)) {
             ClientSoundPlayer.playSound("closegui.wav", 0.7, 1.0f);
-            mc.setScreen(parent);
+            if (mc != null) {
+                mc.setScreen(parent);
+            }
             return true;
         }
 
-        float contentY = headerY + 38f + 10f;
-        float contentH = height - contentY - 16f;
-        float listW = headerWidth * 0.58f;
-        float actionW = headerWidth - listW - 10f;
-        float listX = headerX;
-        float actionX = listX + listW + 10f;
+        // Check account cards click & delete
+        float sepY = winY + 32f;
+        float leftX = winX + 12f;
+        float leftW = 245f;
+        float listY = sepY + 8f + 14f;
+        float listH = WIN_HEIGHT - 48f - 14f;
 
-        // Accounts list clicks
-        float cardStartY = contentY + 26f;
-        float cardAreaH = contentH - 34f;
-        float cardW = listW - 16f;
-        float cardX = listX + 8f;
-        float cardH = 34f;
+        List<Alt> alts = Snill.INSTANCE.altStorage != null ? Snill.INSTANCE.altStorage.getAlts() : new ArrayList<>();
+        float itemH = 28f;
+        float itemSpacing = 3.5f;
 
-        AltStorage storage = Snill.INSTANCE.altStorage;
-        if (storage != null && HoveringUtils.isHovered(mouseX, mouseY, listX, cardStartY, listW, cardAreaH)) {
-            List<Alt> alts = storage.getAlts();
-            float currentCardY = cardStartY + scrollOffset;
-
+        if (HoveringUtils.isHovered(mouseX, mouseY, leftX, listY, leftW, listH)) {
             for (int i = 0; i < alts.size(); i++) {
                 Alt alt = alts.get(i);
-                float btnDelW = 18f;
-                float btnDelH = 18f;
-                float btnDelX = cardX + cardW - btnDelW - 6f;
-                float btnDelY = currentCardY + (cardH - btnDelH) / 2f;
+                float cardY = listY + 3f + i * (itemH + itemSpacing) + scrollOffset;
 
-                if (HoveringUtils.isHovered(mouseX, mouseY, btnDelX, btnDelY, btnDelW, btnDelH)) {
-                    storage.removeAlt(alt);
-                    ClientSoundPlayer.playSound("closegui.wav", 0.6, 1.0f);
-                    setStatus("Удален: " + alt.getUsername(), true);
-                    return true;
-                }
+                if (cardY + itemH < listY || cardY > listY + listH) continue;
 
-                if (HoveringUtils.isHovered(mouseX, mouseY, cardX, currentCardY, cardW, cardH)) {
-                    if (storage.login(alt)) {
-                        ClientSoundPlayer.playSound("clickguiopen.wav", 0.7, 1.0f);
-                        setStatus("Успешный вход: " + alt.getUsername(), true);
+                // Delete button check
+                float delSize = 15f;
+                float delX = leftX + leftW - delSize - 8f;
+                float delY = cardY + (itemH - delSize) / 2f;
+                if (HoveringUtils.isHovered(mouseX, mouseY, delX, delY, delSize, delSize)) {
+                    if (Snill.INSTANCE.altStorage != null) {
+                        Snill.INSTANCE.altStorage.removeAlt(alt);
                     }
+                    ClientSoundPlayer.playSound("closegui.wav", 0.7, 1.0f);
+                    showStatus("Аккаунт " + alt.getUsername() + " удален", false);
                     return true;
                 }
 
-                currentCardY += cardH + 5f;
+                // Card click -> login
+                if (HoveringUtils.isHovered(mouseX, mouseY, leftX + 3f, cardY, leftW - 6f, itemH)) {
+                    if (Snill.INSTANCE.altStorage != null) {
+                        Snill.INSTANCE.altStorage.login(alt);
+                    }
+                    ClientSoundPlayer.playSound("opengui.wav", 0.7, 1.0f);
+                    showStatus("Аккаунт " + alt.getUsername() + " активирован!", true);
+                    return true;
+                }
             }
         }
 
-        // Right side: Input field
-        float actPadX = actionX + 10f;
-        float actPadW = actionW - 20f;
-        float actCurY = contentY + 10f + 18f;
-        float inputH = 26f;
+        // Right Column
+        float rightX = leftX + leftW + 12f;
+        float rightY = sepY + 8f;
+        float rightW = WIN_WIDTH - leftW - 36f;
 
-        if (HoveringUtils.isHovered(mouseX, mouseY, actPadX, actCurY, actPadW, inputH)) {
+        // Input box click
+        float inY = rightY + 14f;
+        float inH = 22f;
+        if (HoveringUtils.isHovered(mouseX, mouseY, rightX, inY, rightW, inH)) {
             typing = true;
             return true;
         } else {
             typing = false;
         }
 
-        actCurY += inputH + 8f;
-        float btnH = 24f;
-
-        // Button: Add & Login
-        if (HoveringUtils.isHovered(mouseX, mouseY, actPadX, actCurY, actPadW, btnH)) {
-            if (!inputName.trim().isEmpty()) {
-                if (storage != null && storage.login(inputName.trim())) {
-                    ClientSoundPlayer.playSound("clickguiopen.wav", 0.7, 1.0f);
-                    setStatus("Успешный вход: " + inputName.trim(), true);
-                    inputName = "";
-                } else {
-                    setStatus("Ошибка входа", false);
-                }
-            } else {
-                setStatus("Введите никнейм!", false);
-            }
+        // "Войти и сохранить"
+        float addY = inY + inH + 6f;
+        float addH = 20f;
+        if (HoveringUtils.isHovered(mouseX, mouseY, rightX, addY, rightW, addH)) {
+            submitInput();
             return true;
         }
 
-        actCurY += btnH + 16f + 12f;
-
-        // Button: Random Nick
-        if (HoveringUtils.isHovered(mouseX, mouseY, actPadX, actCurY, actPadW, btnH)) {
-            if (storage != null) {
-                String randomNick = storage.generateRandomNick();
-                if (storage.login(randomNick)) {
-                    ClientSoundPlayer.playSound("clickguiopen.wav", 0.7, 1.0f);
-                    setStatus("Активирован: " + randomNick, true);
-                }
-            }
+        // "Случайный ник"
+        float sep2Y = addY + addH + 12f;
+        float randY = sep2Y + 20f;
+        float randH = 20f;
+        if (HoveringUtils.isHovered(mouseX, mouseY, rightX, randY, rightW, randH)) {
+            generateRandomNick();
             return true;
         }
 
-        actCurY += btnH + 6f;
-
-        // Button: Clipboard
-        if (HoveringUtils.isHovered(mouseX, mouseY, actPadX, actCurY, actPadW, btnH)) {
-            String clip = mc.keyboard.getClipboard();
-            if (clip != null && !clip.trim().isEmpty()) {
-                String clean = clip.trim().replaceAll("[^a-zA-Z0-9_]", "");
-                if (!clean.isEmpty()) {
-                    if (storage != null && storage.login(clean)) {
-                        ClientSoundPlayer.playSound("clickguiopen.wav", 0.7, 1.0f);
-                        setStatus("Вход из буфера: " + clean, true);
-                    }
-                } else {
-                    setStatus("Некорректный ник", false);
-                }
-            } else {
-                setStatus("Буфер обмена пуст", false);
-            }
+        // "Из буфера обмена"
+        float clipY = randY + randH + 6f;
+        float clipH = 20f;
+        if (HoveringUtils.isHovered(mouseX, mouseY, rightX, clipY, rightW, clipH)) {
+            pasteFromClipboard();
             return true;
         }
 
@@ -428,57 +548,139 @@ public class AltManagerScreen extends Screen implements QClient {
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double horizontalAmount, double verticalAmount) {
-        targetScroll += (float) verticalAmount * 22f;
-        return true;
+        float winX = (this.width - WIN_WIDTH) / 2f;
+        float winY = (this.height - WIN_HEIGHT) / 2f;
+        float sepY = winY + 32f;
+        float leftX = winX + 12f;
+        float leftW = 245f;
+        float listY = sepY + 8f + 14f;
+        float listH = WIN_HEIGHT - 48f - 14f;
+
+        if (HoveringUtils.isHovered(mouseX, mouseY, leftX, listY, leftW, listH)) {
+            targetScroll += (float) (verticalAmount * 22f);
+            return true;
+        }
+
+        return super.mouseScrolled(mouseX, mouseY, horizontalAmount, verticalAmount);
     }
 
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
+            ClientSoundPlayer.playSound("closegui.wav", 0.7, 1.0f);
+            if (mc != null) {
+                mc.setScreen(parent);
+            }
+            return true;
+        }
+
         if (typing) {
+            if (keyCode == GLFW.GLFW_KEY_ENTER || keyCode == GLFW.GLFW_KEY_KP_ENTER) {
+                submitInput();
+                return true;
+            }
+
             if (keyCode == GLFW.GLFW_KEY_BACKSPACE) {
                 if (!inputName.isEmpty()) {
                     inputName = inputName.substring(0, inputName.length() - 1);
                 }
                 return true;
             }
-            if (keyCode == GLFW.GLFW_KEY_ENTER) {
-                if (!inputName.trim().isEmpty() && Snill.INSTANCE.altStorage != null) {
-                    Snill.INSTANCE.altStorage.login(inputName.trim());
-                    ClientSoundPlayer.playSound("clickguiopen.wav", 0.7, 1.0f);
-                    setStatus("Успешный вход: " + inputName.trim(), true);
-                    inputName = "";
-                    typing = false;
+
+            // Ctrl + V
+            if (keyCode == GLFW.GLFW_KEY_V && (modifiers & GLFW.GLFW_MOD_CONTROL) != 0) {
+                if (mc != null && mc.keyboard != null) {
+                    String clip = mc.keyboard.getClipboard();
+                    if (clip != null && !clip.isEmpty()) {
+                        clip = clip.trim();
+                        for (char c : clip.toCharArray()) {
+                            if (isValidNickChar(c) && inputName.length() < 16) {
+                                inputName += c;
+                            }
+                        }
+                    }
                 }
                 return true;
             }
-            if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
-                typing = false;
-                return true;
-            }
         }
-        if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
-            mc.setScreen(parent);
-            return true;
-        }
+
         return super.keyPressed(keyCode, scanCode, modifiers);
     }
 
     @Override
     public boolean charTyped(char chr, int modifiers) {
-        if (typing) {
-            if (Character.isLetterOrDigit(chr) || chr == '_') {
-                if (inputName.length() < 16) {
-                    inputName += chr;
-                }
-            }
+        if (typing && isValidNickChar(chr) && inputName.length() < 16) {
+            inputName += chr;
             return true;
         }
         return super.charTyped(chr, modifiers);
     }
 
-    private void setStatus(String message, boolean success) {
-        this.statusMessage = message;
-        this.statusSuccess = success;
-        this.statusMessageTime = System.currentTimeMillis();
+    private boolean isValidNickChar(char c) {
+        return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_';
+    }
+
+    private void submitInput() {
+        if (inputName == null || inputName.trim().isEmpty()) {
+            showStatus("Ошибка: введите никнейм!", false);
+            return;
+        }
+        String name = inputName.trim();
+        if (Snill.INSTANCE.altStorage != null) {
+            Snill.INSTANCE.altStorage.login(name);
+        }
+        ClientSoundPlayer.playSound("opengui.wav", 0.7, 1.0f);
+        showStatus("Аккаунт " + name + " активирован!", true);
+        inputName = "";
+        typing = false;
+    }
+
+    private void generateRandomNick() {
+        String randName = Snill.INSTANCE.altStorage != null ?
+                Snill.INSTANCE.altStorage.generateRandomNick() :
+                "Snill_" + (1000 + random.nextInt(9000));
+        if (Snill.INSTANCE.altStorage != null) {
+            Snill.INSTANCE.altStorage.login(randName);
+        }
+        ClientSoundPlayer.playSound("opengui.wav", 0.7, 1.0f);
+        showStatus("Случайный ник " + randName + " создан!", true);
+    }
+
+    private void pasteFromClipboard() {
+        if (mc != null && mc.keyboard != null) {
+            String clip = mc.keyboard.getClipboard();
+            if (clip != null && !clip.trim().isEmpty()) {
+                clip = clip.trim();
+                if (clip.length() > 16) clip = clip.substring(0, 16);
+                inputName = clip;
+                typing = true;
+                showStatus("Никнейм вставлен из буфера", true);
+                return;
+            }
+        }
+        showStatus("Буфер обмена пуст", false);
+    }
+
+    private void showStatus(String msg, boolean success) {
+        statusMessage = msg;
+        statusSuccess = success;
+        statusMessageTime = System.currentTimeMillis();
+    }
+
+    private static class MenuParticle {
+        float x, y;
+        float size;
+        float speed;
+        float alpha;
+        float phase;
+
+        MenuParticle(float x, float y, float size, float speed, float alpha, float phase) {
+            this.x = x;
+            this.y = y;
+            this.size = size;
+            this.speed = speed;
+            this.alpha = alpha;
+            this.phase = phase;
+        }
     }
 }
