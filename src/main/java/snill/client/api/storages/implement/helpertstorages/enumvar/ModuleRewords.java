@@ -98,4 +98,5 @@ public interface ModuleRewords {
     FastBreak fastBreak = FastBreak.INSTANCE;
     Browser browser = Browser.INSTANCE;
     HitSounds hitSounds = HitSounds.INSTANCE;
+    CustomCrosshair customCrosshair = CustomCrosshair.INSTANCE;
 }

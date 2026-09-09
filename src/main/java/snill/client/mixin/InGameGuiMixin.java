@@ -30,6 +30,7 @@ import snill.client.api.events.implement.EventRender;
 import snill.client.api.storages.implement.helpertstorages.enumvar.ModuleClass;
 import snill.client.api.utils.SidebarEntry;
 import snill.client.client.modules.impl.misc.NameProtect;
+import snill.client.client.modules.impl.render.CustomCrosshair;
 import snill.client.client.modules.impl.render.SmoothSwapping;
 
 import java.util.Comparator;
@@ -40,6 +41,13 @@ import java.util.function.Function;
 public class InGameGuiMixin implements QClient {
 
     private boolean snill$smoothHotbarPushed;
+
+    @Inject(method = "renderCrosshair", at = @At("HEAD"), cancellable = true)
+    private void snill$cancelVanillaCrosshair(DrawContext context, RenderTickCounter tickCounter, CallbackInfo ci) {
+        if (CustomCrosshair.INSTANCE != null && CustomCrosshair.INSTANCE.isEnable()) {
+            ci.cancel();
+        }
+    }
 
     @Inject(method = "render", at = @At("HEAD"))
     private void render(DrawContext context, RenderTickCounter tickCounter, CallbackInfo ci) {
