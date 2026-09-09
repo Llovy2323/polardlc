@@ -9,6 +9,8 @@ import net.minecraft.client.render.Tessellator;
 import net.minecraft.client.render.VertexFormat;
 import net.minecraft.client.render.VertexFormats;
 import net.minecraft.client.util.math.MatrixStack;
+import net.minecraft.util.math.MathHelper;
+import net.minecraft.util.math.RotationAxis;
 import org.joml.Matrix4f;
 import snill.client.api.events.implement.EventRender;
 import snill.client.api.utils.animation.AnimationUtils;
@@ -21,17 +23,29 @@ import snill.client.api.utils.media.MediaTracker;
 import snill.client.api.utils.render.RenderUtils;
 import snill.client.api.utils.render.fonts.msdf.Font;
 import snill.client.api.utils.render.fonts.msdf.Fonts;
+import snill.client.api.utils.scissor.ScissorUtils;
 import snill.client.client.modules.impl.render.base.InterfaceProcessing;
 
 public class MusicHud extends InterfaceProcessing {
 
+    private static final float CARD_WIDTH = 140.0f;
+    private static final float CARD_HEIGHT = 42.0f;
+    private static final float COVER_SIZE = 30.0f;
+    private static final float COVER_PAD = 5.0f;
+    private static final int BAR_COUNT = 12;
+
     private final AnimationUtils alphaAnimation = new AnimationUtils(0.0f, 8.5f, Easings.QUAD_OUT);
     private final AnimationUtils progressAnimation = new AnimationUtils(0.0f, 5.0f, Easings.QUAD_OUT);
-    private float discRotation = 0.0f;
+    private final AnimationUtils playHoverAnim = new AnimationUtils(0.0f, 12.0f, Easings.QUAD_OUT);
+    private final AnimationUtils prevHoverAnim = new AnimationUtils(0.0f, 12.0f, Easings.QUAD_OUT);
+    private final AnimationUtils nextHoverAnim = new AnimationUtils(0.0f, 12.0f, Easings.QUAD_OUT);
+    private final AnimationUtils coverHoverAnim = new AnimationUtils(0.0f, 10.0f, Easings.QUAD_OUT);
+    private final AnimationUtils playingAnim = new AnimationUtils(0.0f, 7.0f, Easings.QUAD_OUT);
 
-    private static final float CARD_WIDTH = 136.0f;
-    private static final float CARD_HEIGHT = 40.0f;
-    private static final float COVER_SIZE = 32.0f;
+    private float discRotation;
+    private float marqueeOffset;
+    private long lastMarqueeNs = System.nanoTime();
+    private String lastMarqueeKey = "";
 
     public MusicHud(Draggable draggable) {
         super(draggable);
@@ -65,210 +79,338 @@ public class MusicHud extends InterfaceProcessing {
         float alpha = alphaAnimation.getValue();
         if (alpha <= 0.01f) return;
 
-        // Плавное вращение винила при воспроизведении
-        if (track != null && track.isPlaying()) {
-            discRotation = (discRotation + 1.8f) % 360f;
+        boolean isPlaying = track != null && track.isPlaying();
+        playingAnim.update(isPlaying ? 1.0f : 0.0f);
+        float playing = playingAnim.getValue();
+
+        if (isPlaying) {
+            discRotation = (discRotation + 1.65f + playing * 0.55f) % 360.0f;
         }
 
-        // Данные трека (лимит в 24 символа)
         String displayTitle = "Нет трека";
         String artist = "Включите в браузере";
-        boolean isPlaying = false;
         boolean hasCover = false;
 
-        Font titleFont = font(12);
-        Font artistFont = font(10);
-
-        float coverX = x + 4.5f;
-        float coverY = y + 4.0f;
-        float textX = coverX + COVER_SIZE + 5.5f;
-        float maxTextW = (x + CARD_WIDTH - 6.0f) - textX;
-
         if (track != null && !track.getRawTitle().isEmpty()) {
-            displayTitle = track.getDisplayTitle();
-            if (displayTitle.length() > 27) {
-                displayTitle = displayTitle.substring(0, 24) + "...";
-            }
-            if (titleFont != null) {
-                while (titleFont.getWidth(displayTitle) > maxTextW && displayTitle.length() > 4) {
-                    String base = displayTitle.endsWith("...") ? displayTitle.substring(0, displayTitle.length() - 3) : displayTitle;
-                    if (base.length() <= 1) break;
-                    displayTitle = base.substring(0, base.length() - 1) + "...";
-                }
-            }
+            displayTitle = track.getRawTitle();
             artist = track.getArtist();
-            if (artist.length() > 24) {
-                artist = artist.substring(0, 24) + "...";
-            }
-            if (artistFont != null) {
-                while (artistFont.getWidth(artist) > maxTextW && artist.length() > 4) {
-                    String base = artist.endsWith("...") ? artist.substring(0, artist.length() - 3) : artist;
-                    if (base.length() <= 1) break;
-                    artist = base.substring(0, base.length() - 1) + "...";
-                }
-            }
-            isPlaying = track.isPlaying();
             hasCover = track.hasCover();
         } else if (inChat) {
             displayTitle = "Music Player";
             artist = "Ожидание трека...";
         }
 
+        String marqueeKey = displayTitle + "|" + artist;
+        if (!marqueeKey.equals(lastMarqueeKey)) {
+            lastMarqueeKey = marqueeKey;
+            marqueeOffset = 0.0f;
+        }
+
         int themeColor = ColorUtils.getThemeColor();
-        int textColor = ColorUtils.applyAlpha(ColorUtils.rgba(255, 255, 255, 255), alpha);
-        int subTextColor = ColorUtils.applyAlpha(ColorUtils.rgba(165, 165, 180, 255), alpha);
+        int themeSoft = ColorUtils.darken(themeColor, 0.35f);
+        int textColor = ColorUtils.applyAlpha(ColorUtils.rgba(245, 246, 252, 255), alpha);
+        int subTextColor = ColorUtils.applyAlpha(ColorUtils.rgba(158, 162, 178, 255), alpha);
 
-        // 1. Мягкая внешняя тень карточки
-        RenderUtils.drawRoundedRect(matrices, x - 1.0f, y - 1.0f, CARD_WIDTH + 2.0f, CARD_HEIGHT + 2.0f, 6.5f,
-                ColorUtils.rgba(0, 0, 0, (int) (45 * alpha)));
+        float pulse = isPlaying
+                ? 0.55f + 0.45f * (float) ((Math.sin(System.currentTimeMillis() * 0.0064) + 1.0) * 0.5)
+                : 0.25f;
 
-        // 2. Основная компактная темная стеклянная карточка (Glassmorphic Dark)
-        RenderUtils.drawRoundedRect(matrices, x, y, CARD_WIDTH, CARD_HEIGHT, 5.5f,
-                ColorUtils.rgba(18, 18, 24, (int) (225 * alpha)));
+        float coverX = x + COVER_PAD;
+        float coverY = y + (CARD_HEIGHT - COVER_SIZE) * 0.5f;
+        float coverCx = coverX + COVER_SIZE * 0.5f;
+        float coverCy = coverY + COVER_SIZE * 0.5f;
+        float textX = coverX + COVER_SIZE + 6.0f;
 
-        // 3. Тонкий акцентный неоновый блик по верхней грани
-        RenderUtils.drawGradientRect(matrices, x + 6.0f, y, CARD_WIDTH - 12.0f, 1.0f, 1.0f,
-                ColorUtils.applyAlpha(themeColor, alpha * 0.85f),
-                ColorUtils.applyAlpha(ColorUtils.rgba(255, 255, 255, 40), alpha * 0.35f));
+        float playCx = x + CARD_WIDTH - 21.0f;
+        float ctrlCenterY = y + 18.5f;
+        float btnDist = 13.5f;
+        float prevCx = playCx - btnDist;
+        float nextCx = playCx + btnDist;
+        float maxTextW = Math.max(18.0f, prevCx - 10.0f - textX);
 
-        // 4. Обложка трека (аккуратный квадрат 32x32 со скруглением)
-        if (hasCover) {
-            RenderUtils.drawRoundedImage(matrices, track.getCoverTexture(), coverX, coverY, COVER_SIZE, 4.5f, alpha);
-            // Тонкая полупрозрачная рамка вокруг обложки
-            RenderUtils.drawRoundedRect(matrices, coverX, coverY, COVER_SIZE, COVER_SIZE, 4.5f,
-                    ColorUtils.rgba(255, 255, 255, (int) (18 * alpha)));
-        } else {
-            // Премиальная виниловая пластинка с гранями и вращением
-            float cx = coverX + COVER_SIZE * 0.5f;
-            float cy = coverY + COVER_SIZE * 0.5f;
-            float radius = COVER_SIZE * 0.5f;
-
-            // Внешний обод
-            RenderUtils.drawRoundCircle(matrices, cx, cy, radius,
-                    ColorUtils.applyAlpha(ColorUtils.rgba(32, 32, 40, 255), alpha));
-            // Тело винила
-            RenderUtils.drawRoundCircle(matrices, cx, cy, radius - 1.0f,
-                    ColorUtils.applyAlpha(ColorUtils.rgba(18, 18, 22, 255), alpha));
-            // Глянцевые звуковые дорожки
-            RenderUtils.drawRoundCircle(matrices, cx, cy, radius - 3.5f,
-                    ColorUtils.applyAlpha(ColorUtils.rgba(30, 30, 38, 255), alpha));
-            RenderUtils.drawRoundCircle(matrices, cx, cy, radius - 6.0f,
-                    ColorUtils.applyAlpha(ColorUtils.rgba(40, 40, 50, 255), alpha));
-            RenderUtils.drawRoundCircle(matrices, cx, cy, radius - 8.5f,
-                    ColorUtils.applyAlpha(ColorUtils.rgba(24, 24, 30, 255), alpha));
-            // Центральная этикетка цвета темы
-            RenderUtils.drawRoundCircle(matrices, cx, cy, 4.0f,
-                    ColorUtils.applyAlpha(themeColor, alpha));
-            // Центральное отверстие
-            RenderUtils.drawRoundCircle(matrices, cx, cy, 1.5f,
-                    ColorUtils.applyAlpha(ColorUtils.rgba(12, 12, 16, 255), alpha));
-        }
-
-        // 5. Текстовая информация (до 24 букв)
-        if (titleFont != null) {
-            titleFont.draw(matrices, displayTitle, textX, y + 5.5f, textColor);
-        }
-        if (artistFont != null) {
-            artistFont.draw(matrices, artist, textX, y + 16.0f, subTextColor);
-        }
-
-        // 6. Идеально симметричная панель управления: [|<]  [ ( ▶ / || ) ]  [>|]
         double mx = mc.mouse.getX() / mc.getWindow().getScaleFactor();
         double my = mc.mouse.getY() / mc.getWindow().getScaleFactor();
         boolean inScreen = mc.currentScreen != null;
 
-        float ctrlCenterY = y + 26.0f;
-        float playCx = x + CARD_WIDTH - 25.5f;
-        float btnDist = 15.0f;
-        float prevCx = playCx - btnDist;
-        float nextCx = playCx + btnDist;
+        boolean coverHovered = inScreen && HoveringUtils.isHovered(mx, my, coverX, coverY, COVER_SIZE, COVER_SIZE);
+        boolean prevHovered = inScreen && HoveringUtils.isHovered(mx, my, prevCx - 6.0f, ctrlCenterY - 6.0f, 12.0f, 12.0f);
+        boolean playHovered = inScreen && HoveringUtils.isHovered(mx, my, playCx - 8.0f, ctrlCenterY - 8.0f, 16.0f, 16.0f);
+        boolean nextHovered = inScreen && HoveringUtils.isHovered(mx, my, nextCx - 6.0f, ctrlCenterY - 6.0f, 12.0f, 12.0f);
 
-        float ringSize = 15.0f;
-        float ringThickness = 1.6f;
-        float ringX = playCx - (ringSize / 2f);
-        float ringY = ctrlCenterY - (ringSize / 2f);
+        coverHoverAnim.update(coverHovered ? 1.0f : 0.0f);
+        prevHoverAnim.update(prevHovered ? 1.0f : 0.0f);
+        playHoverAnim.update(playHovered ? 1.0f : 0.0f);
+        nextHoverAnim.update(nextHovered ? 1.0f : 0.0f);
 
-        boolean prevHovered = inScreen && HoveringUtils.isHovered(mx, my, prevCx - 6.0f, ctrlCenterY - 6.0f, 12f, 12f);
-        boolean playHovered = inScreen && HoveringUtils.isHovered(mx, my, playCx - 8.0f, ctrlCenterY - 8.0f, 16f, 16f);
-        boolean nextHovered = inScreen && HoveringUtils.isHovered(mx, my, nextCx - 6.0f, ctrlCenterY - 6.0f, 12f, 12f);
+        drawCard(matrices, x, y, themeColor, themeSoft, alpha, pulse);
+        drawCover(matrices, track, coverX, coverY, coverCx, coverCy, hasCover, isPlaying, themeColor, alpha, pulse);
+        drawProgressRing(matrices, track, coverCx, coverCy, themeColor, alpha);
 
-        // 6.1. Кнопка предыдущего трека (|<)
-        int prevColor = ColorUtils.applyAlpha(prevHovered ? themeColor : subTextColor, alpha);
-        drawPrevIcon(matrices, prevCx, ctrlCenterY, prevColor);
-
-        // 6.2. Фоновое тонкое кольцо прогресса
-        RenderUtils.drawRingArc(matrices, ringX, ringY, ringSize, ringThickness, 0f, 360f,
-                ColorUtils.rgba(255, 255, 255, (int) (22 * alpha)));
-
-        // Динамическая дуга прогресса трека
-        float targetProg = track != null ? track.getProgress() : 0.0f;
-        progressAnimation.update(targetProg);
-        float animProg = Math.max(0.0f, Math.min(1.0f, progressAnimation.getValue()));
-
-        if (track != null && track.getDurationMs() > 0) {
-            float arcAngle = Math.max(3.0f, animProg * 360f);
-            RenderUtils.drawRingArc(matrices, ringX, ringY, ringSize, ringThickness, -90f, -90f + arcAngle,
-                    ColorUtils.applyAlpha(themeColor, alpha * 0.95f));
-        } else if (isPlaying) {
-            float spin = (System.currentTimeMillis() * 0.12f) % 360f;
-            RenderUtils.drawRingArc(matrices, ringX, ringY, ringSize, ringThickness, spin, spin + 100f,
-                    ColorUtils.applyAlpha(themeColor, alpha * 0.90f));
+        Font titleFont = font(11);
+        Font artistFont = font(9);
+        drawMarquee(titleFont, matrices, displayTitle, textX, y + 5.0f, maxTextW, textColor);
+        if (artistFont != null) {
+            artistFont.draw(matrices, ellipsize(artistFont, artist, maxTextW), textX, y + 15.2f, subTextColor);
         }
 
-        // Внутренняя стеклянная круглая кнопка
-        int coreColor = playHovered
-                ? ColorUtils.rgba(45, 45, 60, (int) (245 * alpha))
-                : ColorUtils.rgba(24, 24, 32, (int) (235 * alpha));
-        RenderUtils.drawRoundCircle(matrices, playCx, ctrlCenterY, 5.0f, coreColor);
-
-        // Иконка Play / Pause внутри кольца (строго по центру)
-        if (isPlaying) {
-            int pauseColor = playHovered ? ColorUtils.rgba(255, 255, 255, 255) : themeColor;
-            RenderUtils.drawRoundedRect(matrices, playCx - 1.8f, ctrlCenterY - 2.8f, 1.2f, 5.6f, 0.4f,
-                    ColorUtils.applyAlpha(pauseColor, alpha));
-            RenderUtils.drawRoundedRect(matrices, playCx + 0.6f, ctrlCenterY - 2.8f, 1.2f, 5.6f, 0.4f,
-                    ColorUtils.applyAlpha(pauseColor, alpha));
-        } else {
-            int playColor = playHovered ? ColorUtils.rgba(255, 255, 255, 255) : themeColor;
-            drawPlayIcon(matrices, playCx, ctrlCenterY, ColorUtils.applyAlpha(playColor, alpha));
-        }
-
-        // 6.3. Кнопка следующего трека (>|)
-        int nextColor = ColorUtils.applyAlpha(nextHovered ? themeColor : subTextColor, alpha);
-        drawNextIcon(matrices, nextCx, ctrlCenterY, nextColor);
-
-        // 7. Красивая звуковая волна (13 полос, гармонично заполняющих левую часть)
-        float[] bars = tracker.getVisualizerBars();
-        float[] peaks = tracker.getPeakBars();
-        float barsStartX = textX;
-        float barsBaseY = y + CARD_HEIGHT - 4.5f;
-        float barWidth = 1.8f;
-        float barGap = 1.2f;
-        float maxBarH = 9.5f;
-        int barCount = 13;
-
-        float visualizerTotalW = barCount * (barWidth + barGap) - barGap;
-        RenderUtils.drawRoundedRect(matrices, barsStartX, barsBaseY + 0.6f, visualizerTotalW, 0.6f, 0.3f,
-                ColorUtils.applyAlpha(themeColor, alpha * 0.25f));
-
-        for (int i = 0; i < Math.min(bars.length, barCount); i++) {
-            float barH = Math.max(1.8f, bars[i] * maxBarH);
-            float bx = barsStartX + (i * (barWidth + barGap));
-            float by = barsBaseY - barH;
-
-            int bottomColor = ColorUtils.darken(themeColor, 0.12f);
-            int topColor = ColorUtils.interpolateColor(themeColor, ColorUtils.rgba(255, 255, 255, 255), 0.65f);
-
-            RenderUtils.drawGradientRect(matrices, bx, by, barWidth, barH, 0.8f,
-                    ColorUtils.applyAlpha(topColor, alpha * 0.95f),
-                    ColorUtils.applyAlpha(bottomColor, alpha * 0.85f));
-
-            float peakY = barsBaseY - Math.max(barH + 1.0f, peaks[i] * maxBarH);
-            RenderUtils.drawRoundedRect(matrices, bx, peakY, barWidth, 0.8f, 0.4f,
-                    ColorUtils.applyAlpha(ColorUtils.rgba(255, 255, 255, 255), alpha * 0.92f));
-        }
+        drawVisualizer(matrices, tracker, textX, y, themeColor, alpha, isPlaying);
+        drawControls(matrices, playCx, prevCx, nextCx, ctrlCenterY, isPlaying, themeColor, subTextColor, alpha);
 
         super.onRender(eventRender);
+    }
+
+    private void drawCard(MatrixStack matrices, float x, float y, int themeColor, int themeSoft, float alpha, float pulse) {
+        int glow = ColorUtils.applyAlpha(themeColor, alpha * 0.18f * pulse);
+        RenderUtils.drawShadow(matrices, x - 2.0f, y - 1.5f, CARD_WIDTH + 4.0f, CARD_HEIGHT + 4.0f, 8.0f, 16.0f, glow);
+
+        RenderUtils.drawRoundedRect(matrices, x, y, CARD_WIDTH, CARD_HEIGHT, 8.0f,
+                ColorUtils.rgba(8, 9, 14, (int) (228 * alpha)));
+        RenderUtils.drawGradientRect(matrices, x, y, CARD_WIDTH, CARD_HEIGHT, 8.0f,
+                ColorUtils.rgba(22, 24, 34, (int) (70 * alpha)),
+                ColorUtils.rgba(10, 11, 16, (int) (20 * alpha)));
+
+        RenderUtils.drawRoundedRectOutline(matrices, x, y, CARD_WIDTH, CARD_HEIGHT, 8.0f, 0.8f,
+                ColorUtils.rgba(255, 255, 255, (int) (16 * alpha)));
+
+        RenderUtils.drawGradientRect(matrices, x + 10.0f, y, CARD_WIDTH - 20.0f, 1.15f, 0.8f,
+                ColorUtils.applyAlpha(themeColor, alpha * 0.95f),
+                ColorUtils.applyAlpha(ColorUtils.rgba(255, 255, 255, 70), alpha * 0.28f),
+                true);
+
+        RenderUtils.drawRoundedRect(matrices, x + 18.0f, y + CARD_HEIGHT - 1.15f, CARD_WIDTH - 36.0f, 1.15f, 0.7f,
+                ColorUtils.applyAlpha(themeSoft, alpha * 0.55f));
+    }
+
+    private void drawCover(
+            MatrixStack matrices,
+            MediaTrack track,
+            float coverX,
+            float coverY,
+            float coverCx,
+            float coverCy,
+            boolean hasCover,
+            boolean isPlaying,
+            int themeColor,
+            float alpha,
+            float pulse
+    ) {
+        RenderUtils.drawShadow(matrices, coverX - 1.0f, coverY - 1.0f, COVER_SIZE + 2.0f, COVER_SIZE + 2.0f, 8.0f, 10.0f,
+                ColorUtils.applyAlpha(themeColor, alpha * 0.32f * pulse));
+
+        if (hasCover && track != null) {
+            RenderUtils.drawRoundedImage(matrices, track.getCoverTexture(), coverX, coverY, COVER_SIZE, 7.5f, alpha);
+            RenderUtils.drawRoundedRect(matrices, coverX, coverY, COVER_SIZE, COVER_SIZE, 7.5f,
+                    ColorUtils.rgba(255, 255, 255, (int) (12 * alpha)));
+
+            if (isPlaying) {
+                RenderUtils.drawRoundCircle(matrices, coverCx, coverCy, 3.4f,
+                        ColorUtils.applyAlpha(ColorUtils.rgba(8, 8, 12, 255), alpha * 0.72f));
+                RenderUtils.drawRoundCircle(matrices, coverCx, coverCy, 1.35f,
+                        ColorUtils.applyAlpha(themeColor, alpha));
+            }
+        } else {
+            drawVinyl(matrices, coverCx, coverCy, COVER_SIZE * 0.5f, themeColor, alpha, isPlaying);
+        }
+
+        float hover = coverHoverAnim.getValue();
+        if (hover > 0.02f) {
+            RenderUtils.drawRoundCircle(matrices, coverCx, coverCy, COVER_SIZE * 0.5f,
+                    ColorUtils.rgba(6, 7, 12, (int) (150 * alpha * hover)));
+            int overlay = ColorUtils.applyAlpha(ColorUtils.rgba(255, 255, 255, 255), alpha * hover);
+            if (isPlaying) {
+                RenderUtils.drawRoundedRect(matrices, coverCx - 2.1f, coverCy - 3.1f, 1.4f, 6.2f, 0.45f, overlay);
+                RenderUtils.drawRoundedRect(matrices, coverCx + 0.7f, coverCy - 3.1f, 1.4f, 6.2f, 0.45f, overlay);
+            } else {
+                drawPlayIcon(matrices, coverCx + 0.2f, coverCy, overlay);
+            }
+        }
+    }
+
+    private void drawVinyl(MatrixStack matrices, float cx, float cy, float radius, int themeColor, float alpha, boolean playing) {
+        matrices.push();
+        matrices.translate(cx, cy, 0.0f);
+        matrices.multiply(RotationAxis.POSITIVE_Z.rotationDegrees(playing ? discRotation : discRotation * 0.12f));
+        matrices.translate(-cx, -cy, 0.0f);
+
+        RenderUtils.drawRoundCircle(matrices, cx, cy, radius,
+                ColorUtils.applyAlpha(ColorUtils.rgba(10, 10, 14, 255), alpha));
+        RenderUtils.drawRoundCircle(matrices, cx, cy, radius - 1.15f,
+                ColorUtils.applyAlpha(ColorUtils.rgba(24, 24, 32, 255), alpha));
+
+        for (int i = 0; i < 4; i++) {
+            float groove = radius - 3.4f - i * 2.35f;
+            if (groove < 6.0f) break;
+            RenderUtils.drawRoundCircle(matrices, cx, cy, groove,
+                    ColorUtils.applyAlpha(ColorUtils.rgba(38 + i * 5, 38, 48, 255), alpha));
+            RenderUtils.drawRoundCircle(matrices, cx, cy, groove - 0.85f,
+                    ColorUtils.applyAlpha(ColorUtils.rgba(16, 16, 22, 255), alpha));
+        }
+
+        RenderUtils.drawRoundCircle(matrices, cx, cy, 5.4f, ColorUtils.applyAlpha(themeColor, alpha));
+        RenderUtils.drawRoundCircle(matrices, cx, cy, 2.05f,
+                ColorUtils.applyAlpha(ColorUtils.rgba(8, 8, 12, 255), alpha));
+
+        RenderUtils.drawRingArc(matrices, cx - radius, cy - radius, radius * 2.0f, 1.35f, -48.0f, 28.0f,
+                ColorUtils.applyAlpha(ColorUtils.rgba(255, 255, 255, 255), alpha * 0.30f));
+        matrices.pop();
+    }
+
+    private void drawProgressRing(MatrixStack matrices, MediaTrack track, float coverCx, float coverCy, int themeColor, float alpha) {
+        float ringSize = COVER_SIZE + 3.6f;
+        float ringX = coverCx - ringSize * 0.5f;
+        float ringY = coverCy - ringSize * 0.5f;
+        float thickness = 1.55f;
+
+        RenderUtils.drawRingArc(matrices, ringX, ringY, ringSize, thickness, 0.0f, 360.0f,
+                ColorUtils.rgba(255, 255, 255, (int) (18 * alpha)));
+
+        float targetProg = track != null ? track.getProgress() : 0.0f;
+        progressAnimation.update(targetProg);
+        float animProg = MathHelper.clamp(progressAnimation.getValue(), 0.0f, 1.0f);
+
+        if (track != null && track.getDurationMs() > 0) {
+            float arc = Math.max(8.0f, animProg * 360.0f);
+            RenderUtils.drawRingArc(matrices, ringX, ringY, ringSize, thickness, -90.0f, -90.0f + arc,
+                    ColorUtils.applyAlpha(themeColor, alpha * 0.95f));
+        } else if (track != null && track.isPlaying()) {
+            float spin = (System.currentTimeMillis() * 0.18f) % 360.0f;
+            RenderUtils.drawRingArc(matrices, ringX, ringY, ringSize, thickness, spin, spin + 92.0f,
+                    ColorUtils.applyAlpha(themeColor, alpha * 0.90f));
+        }
+    }
+
+    private void drawVisualizer(MatrixStack matrices, MediaTracker tracker, float textX, float y, int themeColor, float alpha, boolean isPlaying) {
+        float[] bars = tracker.getVisualizerBars();
+        float[] peaks = tracker.getPeakBars();
+        if (bars == null || bars.length == 0) return;
+
+        float barsStartX = textX;
+        float barsBaseY = y + CARD_HEIGHT - 5.4f;
+        float barWidth = 1.55f;
+        float barGap = 1.15f;
+        float maxBarH = 7.6f;
+        int count = Math.min(BAR_COUNT, bars.length);
+
+        float totalW = count * (barWidth + barGap) - barGap;
+        RenderUtils.drawRoundedRect(matrices, barsStartX, barsBaseY + 0.55f, totalW, 0.7f, 0.35f,
+                ColorUtils.applyAlpha(themeColor, alpha * 0.18f));
+
+        long time = System.currentTimeMillis();
+        for (int i = 0; i < count; i++) {
+            float wave = isPlaying ? 0.08f * (float) Math.sin(time * 0.012 + i * 0.55) : 0.0f;
+            float value = MathHelper.clamp(bars[i] + wave, 0.12f, 1.0f);
+            float barH = Math.max(1.6f, value * maxBarH);
+            float bx = barsStartX + i * (barWidth + barGap);
+            float by = barsBaseY - barH;
+
+            int topColor = ColorUtils.interpolateColor(themeColor, ColorUtils.rgba(255, 255, 255, 255), 0.55f);
+            int bottomColor = ColorUtils.darken(themeColor, 0.18f);
+
+            RenderUtils.drawRoundedRect(matrices, bx - 0.35f, by - 0.4f, barWidth + 0.7f, barH + 0.8f, 0.9f,
+                    ColorUtils.applyAlpha(themeColor, alpha * 0.16f));
+            RenderUtils.drawGradientRect(matrices, bx, by, barWidth, barH, 0.7f,
+                    ColorUtils.applyAlpha(topColor, alpha * 0.96f),
+                    ColorUtils.applyAlpha(bottomColor, alpha * 0.82f));
+
+            if (peaks != null && i < peaks.length) {
+                float peakY = barsBaseY - Math.max(barH + 0.7f, peaks[i] * maxBarH);
+                RenderUtils.drawRoundedRect(matrices, bx, peakY, barWidth, 0.75f, 0.35f,
+                        ColorUtils.applyAlpha(ColorUtils.rgba(255, 255, 255, 255), alpha * 0.88f));
+            }
+        }
+    }
+
+    private void drawControls(
+            MatrixStack matrices,
+            float playCx,
+            float prevCx,
+            float nextCx,
+            float ctrlCenterY,
+            boolean isPlaying,
+            int themeColor,
+            int subTextColor,
+            float alpha
+    ) {
+        int prevColor = ColorUtils.interpolateColor(subTextColor, themeColor, prevHoverAnim.getValue());
+        int nextColor = ColorUtils.interpolateColor(subTextColor, themeColor, nextHoverAnim.getValue());
+        drawPrevIcon(matrices, prevCx, ctrlCenterY, ColorUtils.applyAlpha(prevColor, alpha));
+        drawNextIcon(matrices, nextCx, ctrlCenterY, ColorUtils.applyAlpha(nextColor, alpha));
+
+        float hover = playHoverAnim.getValue();
+        float ringSize = 15.4f;
+        float ringX = playCx - ringSize * 0.5f;
+        float ringY = ctrlCenterY - ringSize * 0.5f;
+
+        RenderUtils.drawRoundCircle(matrices, playCx, ctrlCenterY, 7.6f,
+                ColorUtils.applyAlpha(themeColor, alpha * (0.10f + 0.16f * hover)));
+        RenderUtils.drawRingArc(matrices, ringX, ringY, ringSize, 1.25f, 0.0f, 360.0f,
+                ColorUtils.applyAlpha(themeColor, alpha * (0.35f + 0.45f * hover)));
+
+        int core = ColorUtils.interpolateColor(
+                ColorUtils.rgba(18, 19, 28, (int) (240 * alpha)),
+                ColorUtils.rgba(38, 40, 56, (int) (245 * alpha)),
+                hover
+        );
+        RenderUtils.drawRoundCircle(matrices, playCx, ctrlCenterY, 5.15f, core);
+
+        int iconColor = ColorUtils.interpolateColor(themeColor, ColorUtils.rgba(255, 255, 255, 255), hover);
+        iconColor = ColorUtils.applyAlpha(iconColor, alpha);
+        if (isPlaying) {
+            RenderUtils.drawRoundedRect(matrices, playCx - 1.85f, ctrlCenterY - 2.7f, 1.2f, 5.4f, 0.4f, iconColor);
+            RenderUtils.drawRoundedRect(matrices, playCx + 0.65f, ctrlCenterY - 2.7f, 1.2f, 5.4f, 0.4f, iconColor);
+        } else {
+            drawPlayIcon(matrices, playCx + 0.15f, ctrlCenterY, iconColor);
+        }
+    }
+
+    private void drawMarquee(Font font, MatrixStack matrices, String text, float x, float y, float maxW, int color) {
+        if (font == null || text == null || text.isEmpty() || maxW <= 1.0f) return;
+
+        float width = font.getWidth(text);
+        long now = System.nanoTime();
+        float dt = MathHelper.clamp((now - lastMarqueeNs) / 1_000_000_000.0f, 0.0f, 0.05f);
+        lastMarqueeNs = now;
+
+        if (width <= maxW) {
+            marqueeOffset = 0.0f;
+            font.draw(matrices, text, x, y, color);
+            return;
+        }
+
+        marqueeOffset += dt * 22.0f;
+        float gap = 16.0f;
+        float loop = width + gap;
+        if (marqueeOffset >= loop) marqueeOffset -= loop;
+
+        ScissorUtils.push();
+        ScissorUtils.setFromComponentCoordinates(x, y - 1.5f, maxW, 11.0f);
+        try {
+            font.draw(matrices, text, x - marqueeOffset, y, color);
+            font.draw(matrices, text, x - marqueeOffset + loop, y, color);
+        } finally {
+            ScissorUtils.unset();
+            ScissorUtils.pop();
+        }
+
+        RenderUtils.drawGradientRect(matrices, x, y - 1.2f, 7.0f, 10.5f, 0.0f,
+                ColorUtils.rgba(8, 9, 14, (color >>> 24) & 0xFF),
+                ColorUtils.rgba(8, 9, 14, 0),
+                true);
+        RenderUtils.drawGradientRect(matrices, x + maxW - 7.0f, y - 1.2f, 7.0f, 10.5f, 0.0f,
+                ColorUtils.rgba(8, 9, 14, 0),
+                ColorUtils.rgba(8, 9, 14, (color >>> 24) & 0xFF),
+                true);
+    }
+
+    private String ellipsize(Font font, String text, float maxW) {
+        if (font == null || text == null) return "";
+        if (font.getWidth(text) <= maxW) return text;
+
+        String value = text;
+        while (font.getWidth(value + "...") > maxW && value.length() > 1) {
+            value = value.substring(0, value.length() - 1);
+        }
+        return value + "...";
     }
 
     private void drawPlayIcon(MatrixStack matrices, float cx, float cy, int color) {
@@ -277,21 +419,13 @@ public class MusicHud extends InterfaceProcessing {
         RenderSystem.disableCull();
         RenderSystem.setShader(ShaderProgramKeys.POSITION_COLOR);
 
-        int a = (color >> 24) & 0xFF;
-        if (a == 0) a = 255;
-        float r = ((color >> 16) & 0xFF) / 255f;
-        float g = ((color >> 8) & 0xFF) / 255f;
-        float b = (color & 0xFF) / 255f;
-        float af = a / 255f;
-
+        float[] rgba = unpack(color);
         Matrix4f matrix = matrices.peek().getPositionMatrix();
         BufferBuilder buffer = Tessellator.getInstance().begin(VertexFormat.DrawMode.TRIANGLES, VertexFormats.POSITION_COLOR);
-        // Геометрически центрированный треугольник Play ▶
-        buffer.vertex(matrix, cx - 1.5f, cy - 2.8f, 0).color(r, g, b, af);
-        buffer.vertex(matrix, cx - 1.5f, cy + 2.8f, 0).color(r, g, b, af);
-        buffer.vertex(matrix, cx + 2.5f, cy, 0).color(r, g, b, af);
+        buffer.vertex(matrix, cx - 1.45f, cy - 2.7f, 0).color(rgba[0], rgba[1], rgba[2], rgba[3]);
+        buffer.vertex(matrix, cx - 1.45f, cy + 2.7f, 0).color(rgba[0], rgba[1], rgba[2], rgba[3]);
+        buffer.vertex(matrix, cx + 2.45f, cy, 0).color(rgba[0], rgba[1], rgba[2], rgba[3]);
         BufferRenderer.drawWithGlobalProgram(buffer.end());
-
         RenderSystem.disableBlend();
     }
 
@@ -301,52 +435,45 @@ public class MusicHud extends InterfaceProcessing {
         RenderSystem.disableCull();
         RenderSystem.setShader(ShaderProgramKeys.POSITION_COLOR);
 
-        int a = (color >> 24) & 0xFF;
-        if (a == 0) a = 255;
-        float r = ((color >> 16) & 0xFF) / 255f;
-        float g = ((color >> 8) & 0xFF) / 255f;
-        float b = (color & 0xFF) / 255f;
-        float af = a / 255f;
-
+        float[] rgba = unpack(color);
         Matrix4f matrix = matrices.peek().getPositionMatrix();
         BufferBuilder buffer = Tessellator.getInstance().begin(VertexFormat.DrawMode.TRIANGLES, VertexFormats.POSITION_COLOR);
-        // Треугольник >
-        buffer.vertex(matrix, cx - 3.0f, cy - 2.8f, 0).color(r, g, b, af);
-        buffer.vertex(matrix, cx - 3.0f, cy + 2.8f, 0).color(r, g, b, af);
-        buffer.vertex(matrix, cx + 0.6f, cy, 0).color(r, g, b, af);
+        buffer.vertex(matrix, cx - 2.9f, cy - 2.55f, 0).color(rgba[0], rgba[1], rgba[2], rgba[3]);
+        buffer.vertex(matrix, cx - 2.9f, cy + 2.55f, 0).color(rgba[0], rgba[1], rgba[2], rgba[3]);
+        buffer.vertex(matrix, cx + 0.45f, cy, 0).color(rgba[0], rgba[1], rgba[2], rgba[3]);
         BufferRenderer.drawWithGlobalProgram(buffer.end());
-
         RenderSystem.disableBlend();
 
-        // Вертикальная черточка |
-        RenderUtils.drawRoundedRect(matrices, cx + 1.8f, cy - 2.8f, 1.2f, 5.6f, 0.4f, color);
+        RenderUtils.drawRoundedRect(matrices, cx + 1.55f, cy - 2.55f, 1.15f, 5.1f, 0.4f, color);
     }
 
     private void drawPrevIcon(MatrixStack matrices, float cx, float cy, int color) {
-        // Вертикальная черточка |
-        RenderUtils.drawRoundedRect(matrices, cx - 3.0f, cy - 2.8f, 1.2f, 5.6f, 0.4f, color);
+        RenderUtils.drawRoundedRect(matrices, cx - 2.7f, cy - 2.55f, 1.15f, 5.1f, 0.4f, color);
 
         RenderSystem.enableBlend();
         RenderSystem.defaultBlendFunc();
         RenderSystem.disableCull();
         RenderSystem.setShader(ShaderProgramKeys.POSITION_COLOR);
 
-        int a = (color >> 24) & 0xFF;
-        if (a == 0) a = 255;
-        float r = ((color >> 16) & 0xFF) / 255f;
-        float g = ((color >> 8) & 0xFF) / 255f;
-        float b = (color & 0xFF) / 255f;
-        float af = a / 255f;
-
+        float[] rgba = unpack(color);
         Matrix4f matrix = matrices.peek().getPositionMatrix();
         BufferBuilder buffer = Tessellator.getInstance().begin(VertexFormat.DrawMode.TRIANGLES, VertexFormats.POSITION_COLOR);
-        // Треугольник <
-        buffer.vertex(matrix, cx + 3.0f, cy - 2.8f, 0).color(r, g, b, af);
-        buffer.vertex(matrix, cx + 3.0f, cy + 2.8f, 0).color(r, g, b, af);
-        buffer.vertex(matrix, cx - 0.6f, cy, 0).color(r, g, b, af);
+        buffer.vertex(matrix, cx + 2.7f, cy - 2.55f, 0).color(rgba[0], rgba[1], rgba[2], rgba[3]);
+        buffer.vertex(matrix, cx + 2.7f, cy + 2.55f, 0).color(rgba[0], rgba[1], rgba[2], rgba[3]);
+        buffer.vertex(matrix, cx - 0.45f, cy, 0).color(rgba[0], rgba[1], rgba[2], rgba[3]);
         BufferRenderer.drawWithGlobalProgram(buffer.end());
-
         RenderSystem.disableBlend();
+    }
+
+    private float[] unpack(int color) {
+        int a = (color >> 24) & 0xFF;
+        if (a == 0) a = 255;
+        return new float[]{
+                ((color >> 16) & 0xFF) / 255.0f,
+                ((color >> 8) & 0xFF) / 255.0f,
+                (color & 0xFF) / 255.0f,
+                a / 255.0f
+        };
     }
 
     public boolean handleClick(double mouseX, double mouseY, int button) {
@@ -354,36 +481,30 @@ public class MusicHud extends InterfaceProcessing {
 
         float x = draggable.getX();
         float y = draggable.getY();
-        float ctrlCenterY = y + 26.0f;
-        float playCx = x + CARD_WIDTH - 25.5f;
-        float btnDist = 15.0f;
+        float coverX = x + COVER_PAD;
+        float coverY = y + (CARD_HEIGHT - COVER_SIZE) * 0.5f;
+        float playCx = x + CARD_WIDTH - 21.0f;
+        float ctrlCenterY = y + 18.5f;
+        float btnDist = 13.5f;
         float prevCx = playCx - btnDist;
         float nextCx = playCx + btnDist;
 
-        // Клик по предыдущему треку (|<)
-        if (HoveringUtils.isHovered(mouseX, mouseY, prevCx - 6.0f, ctrlCenterY - 6.0f, 12f, 12f)) {
+        if (HoveringUtils.isHovered(mouseX, mouseY, prevCx - 6.0f, ctrlCenterY - 6.0f, 12.0f, 12.0f)) {
             MediaTracker.getInstance().prevTrack();
             return true;
         }
-
-        // Клик по кольцу Play/Pause
-        if (HoveringUtils.isHovered(mouseX, mouseY, playCx - 8.0f, ctrlCenterY - 8.0f, 16f, 16f)) {
+        if (HoveringUtils.isHovered(mouseX, mouseY, playCx - 8.0f, ctrlCenterY - 8.0f, 16.0f, 16.0f)) {
             MediaTracker.getInstance().togglePlayPause();
             return true;
         }
-
-        // Клик по следующему треку (>|)
-        if (HoveringUtils.isHovered(mouseX, mouseY, nextCx - 6.0f, ctrlCenterY - 6.0f, 12f, 12f)) {
+        if (HoveringUtils.isHovered(mouseX, mouseY, nextCx - 6.0f, ctrlCenterY - 6.0f, 12.0f, 12.0f)) {
             MediaTracker.getInstance().nextTrack();
             return true;
         }
-
-        // Клик по обложке трека (Play/Pause)
-        if (HoveringUtils.isHovered(mouseX, mouseY, x + 4.5f, y + 4.0f, COVER_SIZE, COVER_SIZE)) {
+        if (HoveringUtils.isHovered(mouseX, mouseY, coverX, coverY, COVER_SIZE, COVER_SIZE)) {
             MediaTracker.getInstance().togglePlayPause();
             return true;
         }
-
         return false;
     }
 }
